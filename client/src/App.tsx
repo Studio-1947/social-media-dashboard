@@ -26,17 +26,20 @@ function App() {
     <DashboardLayout>
       <div className="max-w-7xl mx-auto">
         {/* Header with tabs and date picker */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-6">
-            <button className="text-sm font-medium text-gray-900 pb-2 border-b-2 border-blue-600">
-              COMMUNITY
-            </button>
-            <button className="text-sm font-medium text-gray-500 pb-2 hover:text-gray-900">
-              ACCOUNT
-            </button>
-            <button className="text-sm font-medium text-gray-500 pb-2 hover:text-gray-900">
-              POSTS
-            </button>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-8">
+            <h1 className="text-2xl font-bold text-black">Social Media Analytics</h1>
+            <div className="flex items-center gap-6">
+              <button className="text-sm font-semibold text-black pb-2 border-b-2 border-black">
+                COMMUNITY
+              </button>
+              <button className="text-sm font-medium text-gray-400 pb-2 hover:text-black transition-colors">
+                ACCOUNT
+              </button>
+              <button className="text-sm font-medium text-gray-400 pb-2 hover:text-black transition-colors">
+                POSTS
+              </button>
+            </div>
           </div>
           <DateRangePicker />
         </div>

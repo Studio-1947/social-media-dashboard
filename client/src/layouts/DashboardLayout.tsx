@@ -1,19 +1,22 @@
 import React from 'react';
 import { Sidebar } from '../components/Sidebar';
 
-interface LayoutProps {
+interface DashboardLayoutProps {
     children: React.ReactNode;
 }
 
-export const DashboardLayout = ({ children }: LayoutProps) => {
+export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return (
-        <div className="min-h-screen bg-[#f8fafc]">
+        <div className="flex min-h-screen bg-gray-50">
+            {/* Sidebar - Fixed width */}
             <Sidebar />
-            <div className="pl-64 transition-all duration-300">
-                <main className="p-8">
+
+            {/* Main Content Area - Takes remaining space */}
+            <main className="flex-1 overflow-x-hidden">
+                <div className="p-8">
                     {children}
-                </main>
-            </div>
+                </div>
+            </main>
         </div>
     );
 };

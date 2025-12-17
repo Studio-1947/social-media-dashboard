@@ -34,14 +34,14 @@ export const MetricoolDashboard = ({ instagramData }: { instagramData: any }) =>
     }));
 
     const MetricCard = ({ value, label, color, trend }: MetricCard) => (
-        <div className={`${color} rounded-xl p-4 shadow-sm`}>
+        <div className={`${color} rounded-xl p-4 shadow-sm border`}>
             <div className="flex items-center justify-between">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-2xl font-bold">
                     {value}
                     {trend && <span className="text-sm ml-1">{trend === 'up' ? '↑' : '↓'}</span>}
                 </div>
             </div>
-            <div className="text-sm text-gray-700 mt-1">{label}</div>
+            <div className="text-sm mt-1 opacity-75">{label}</div>
         </div>
     );
 
@@ -60,9 +60,9 @@ export const MetricoolDashboard = ({ instagramData }: { instagramData: any }) =>
                 <div className="mb-4">
                     <h4 className="text-base font-medium text-gray-700 mb-4">Growth</h4>
                     <div className="grid grid-cols-3 gap-4 mb-6">
-                        <MetricCard value="15" label="Followers" color="bg-blue-200" />
-                        <MetricCard value="2" label="Following" color="bg-green-200" />
-                        <MetricCard value={totalPosts} label="Total content" color="bg-amber-200" trend="up" />
+                        <MetricCard value="15" label="Followers" color="bg-gray-100 border-gray-200 text-gray-900" />
+                        <MetricCard value="2" label="Following" color="bg-gray-100 border-gray-200 text-gray-900" />
+                        <MetricCard value={totalPosts} label="Total content" color="bg-black text-white border-black" trend="up" />
                     </div>
                 </div>
 
@@ -89,8 +89,8 @@ export const MetricoolDashboard = ({ instagramData }: { instagramData: any }) =>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h4 className="text-base font-medium text-gray-700 mb-4">Profile</h4>
                 <div className="grid grid-cols-2 gap-4 mb-6">
-                    <MetricCard value={avgReachPerPost} label="Avg. reach per day" color="bg-green-200" trend="down" />
-                    <MetricCard value={totalPosts} label="Total content" color="bg-amber-200" trend="up" />
+                    <MetricCard value={avgReachPerPost} label="Avg. reach per day" color="bg-gray-100 border-gray-200 text-gray-900" trend="down" />
+                    <MetricCard value={totalPosts} label="Total content" color="bg-black text-white border-black" trend="up" />
                 </div>
 
                 <div className="h-[250px]">
@@ -110,11 +110,11 @@ export const MetricoolDashboard = ({ instagramData }: { instagramData: any }) =>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h4 className="text-base font-medium text-gray-700 mb-4">Organic Summary</h4>
                 <div className="grid grid-cols-5 gap-4 mb-6">
-                    <MetricCard value={avgEngagement} label="Engagement" color="bg-blue-200" trend="up" />
-                    <MetricCard value={totalInteractions} label="Interactions" color="bg-green-200" trend="up" />
-                    <MetricCard value={avgReachPerPost} label="Avg. reach per post" color="bg-pink-200" trend="down" />
-                    <MetricCard value={totalViews} label="Views" color="bg-purple-200" trend="down" />
-                    <MetricCard value={totalPosts} label="Posts" color="bg-amber-200" trend="up" />
+                    <MetricCard value={avgEngagement} label="Engagement" color="bg-gray-100 border-gray-200 text-gray-900" trend="up" />
+                    <MetricCard value={totalInteractions} label="Interactions" color="bg-gray-100 border-gray-200 text-gray-900" trend="up" />
+                    <MetricCard value={avgReachPerPost} label="Avg. reach per post" color="bg-gray-100 border-gray-200 text-gray-900" trend="down" />
+                    <MetricCard value={totalViews} label="Views" color="bg-gray-100 border-gray-200 text-gray-900" trend="down" />
+                    <MetricCard value={totalPosts} label="Posts" color="bg-black text-white border-black" trend="up" />
                 </div>
 
                 <div className="h-[250px]">
@@ -136,10 +136,10 @@ export const MetricoolDashboard = ({ instagramData }: { instagramData: any }) =>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                 <h4 className="text-base font-medium text-gray-700 mb-4">Organic Interactions</h4>
                 <div className="grid grid-cols-4 gap-4 mb-6">
-                    <MetricCard value={totalLikes} label="Likes" color="bg-green-200" trend="up" />
-                    <MetricCard value={totalComments} label="Comments" color="bg-pink-200" />
-                    <MetricCard value={totalSaved} label="Saved" color="bg-purple-200" />
-                    <MetricCard value={totalPosts} label="Posts" color="bg-amber-200" trend="up" />
+                    <MetricCard value={totalLikes} label="Likes" color="bg-gray-100 border-gray-200 text-gray-900" trend="up" />
+                    <MetricCard value={totalComments} label="Comments" color="bg-gray-100 border-gray-200 text-gray-900" />
+                    <MetricCard value={totalSaved} label="Saved" color="bg-gray-100 border-gray-200 text-gray-900" />
+                    <MetricCard value={totalPosts} label="Posts" color="bg-black text-white border-black" trend="up" />
                 </div>
 
                 <div className="h-[250px]">
