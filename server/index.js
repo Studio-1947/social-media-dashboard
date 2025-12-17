@@ -75,12 +75,10 @@ app.use('/api/metricool', async (req, res) => {
     try {
         let targetUrl = endpoint;
 
-        // Rewrite /instagram to the verified follower growth endpoint
+        // Rewrite /instagram to the verified working endpoint
         if (endpoint.includes('/instagram')) {
-            // Using the endpoint that returned valid JSON (even if empty)
-            targetUrl = endpoint.replace('/instagram', '/stats/timeline/followers');
-
-            // Note: The params userId/blogId/from/to are already in the query string from frontend
+            // Use the posts endpoint which was working in TypeScript version
+            targetUrl = endpoint.replace('/instagram', '/v2/analytics/posts/instagram');
         }
 
         // Rewrite /distribution to verified endpoint
@@ -113,8 +111,18 @@ app.use('/api/metricool', async (req, res) => {
             console.log('[Proxy] Success (Real API)');
             res.status(200).json(response.data);
         } else {
-            console.log(`[Proxy] API Failed (Status: ${response.status}). NOT serving Mock Data (User Request).`);
-            res.status(response.status).json({ error: "API Request Failed" });
+            console.log(`[Proxy] API Failed (Status: ${response.status})`);
+            console.log(`[Proxy] Response Type: ${contentType}`);
+            console.log(`[Proxy] Response Data:`, JSON.stringify(response.data).substring(0, 500));
+            console.log(`[Proxy] Target URL: ${targetUrl}`);
+            console.log(`[Proxy] API Key Present: ${!!API_KEY}`);
+
+            res.status(response.status).json({
+                error: "Metricool API Request Failed",
+                status: response.status,
+                details: response.data?.message || response.data?.error || "Unknown error from Metricool",
+                endpoint: targetUrl
+            });
         }
 
     } catch (error) {
@@ -132,10 +140,32 @@ app.use('/api/metricool', async (req, res) => {
     }
 });
 
+// Debug endpoint to verify API key and environment
+app.get('/api/debug', (req, res) => {
+    const hasApiKey = !!process.env.METRICOOL_API_KEY;
+    const apiKeyPreview = process.env.METRICOOL_API_KEY
+        ? `${process.env.METRICOOL_API_KEY.substring(0, 10)}...${process.env.METRICOOL_API_KEY.slice(-4)}`
+        : 'USING FALLBACK KEY';
+
+    res.json({
+        status: 'running',
+        environment: process.env.NODE_ENV || 'development',
+        hasApiKey,
+        apiKeyPreview,
+        frontendUrls: FRONTEND_URLS,
+        port: PORT
+    });
+});
+
 app.get('/', (req, res) => {
     res.send('Social Media Dashboard API is running.');
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`API Key configured: ${!!process.env.METRICOOL_API_KEY ? 'YES' : 'NO (using fallback)'}`);
+    console.log(`Allowed Origins: ${FRONTEND_URLS.join(', ')}`);
 });
+
+// Export for Vercel serverless deployment
+module.exports = app;
