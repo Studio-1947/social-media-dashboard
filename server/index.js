@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 5000;
 // CORS Configuration - Dynamic and Robust
 const FRONTEND_URLS = process.env.FRONTEND_URLS
     ? process.env.FRONTEND_URLS.split(',').map(url => url.trim())
-    : ['http://localhost:5173', 'http://localhost:3000', ' https://social-media-dashboard-frontend-rosy.vercel.app'];
+    : ['http://localhost:5173', 'http://localhost:3000', 'https://social-media-dashboard-frontend-rosy.vercel.app'];
 
 const corsOptions = {
     origin: function (origin, callback) {
