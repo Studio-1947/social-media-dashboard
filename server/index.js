@@ -6,7 +6,29 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+// CORS Configuration - Dynamic and Robust
+const FRONTEND_URLS = process.env.FRONTEND_URLS
+    ? process.env.FRONTEND_URLS.split(',').map(url => url.trim())
+    : ['http://localhost:5173', 'http://localhost:3000', ' https://social-media-dashboard-frontend-rosy.vercel.app'];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+
+        if (FRONTEND_URLS.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log(`[CORS] Blocked request from origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const METRICOOL_BASE_URL = 'https://app.metricool.com/api';

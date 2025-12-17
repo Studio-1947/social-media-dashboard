@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// Dynamic Backend Configuration - uses environment variable with fallback
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/metricool';
+
 const api = axios.create({
-    baseURL: 'http://localhost:5000/api/metricool',
+    baseURL: API_BASE_URL,
 });
 
 export const fetchSettings = async (userId: string) => {
