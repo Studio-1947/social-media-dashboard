@@ -1,21 +1,72 @@
-import { Download } from 'lucide-react';
+import { useState } from 'react';
+import { Download, Search } from 'lucide-react';
 
 interface PostsTableProps {
     posts: any[];
 }
 
 export const PostsTable = ({ posts }: PostsTableProps) => {
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredPosts = posts.filter(post => {
+        const content = (post.content || post.caption || '').toLowerCase();
+        const type = (post.type || '').toLowerCase();
+        return content.includes(searchTerm.toLowerCase()) || type.includes(searchTerm.toLowerCase());
+    });
+
+    const downloadCSV = () => {
+        if (posts.length === 0) return;
+
+        const headers = ['Post', 'Type', 'Date', 'Views', 'Reach', 'Likes', 'Comments', 'Saved', 'Shares'];
+        const rows = posts.map(post => [
+            (post.content || post.caption || '').replace(/,/g, ' '),
+            post.type?.replace('FEED_', '').replace('_', ' ') || 'POST',
+            new Date(post.publishedAt?.dateTime || post.createdTime).toLocaleDateString(),
+            post.views || post.impressionsTotal || 0,
+            post.reach || 0,
+            post.likes || 0,
+            post.comments || 0,
+            post.saved || 0,
+            post.shares || 0
+        ]);
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `instagram_posts_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
     return (
         <div className="modern-card p-6 lg:p-8 animate-slide-up animate-delay-400">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
                 <h3 className="text-xl font-bold text-primary-900">List of Posts</h3>
                 <div className="flex items-center gap-3">
-                    <input
-                        type="text"
-                        placeholder="Search posts..."
-                        className="px-4 py-2 text-sm border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-all duration-200 bg-white placeholder:text-primary-400"
-                    />
-                    <button className="flex items-center gap-2 px-4 py-2 text-sm text-primary-700 hover:text-primary-900 hover:bg-primary-50 rounded-xl border border-primary-200 transition-all duration-200 font-medium">
+                    <div className="relative">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-400" />
+                        <input
+                            type="text"
+                            placeholder="Search posts..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 pr-4 py-2 text-sm border border-primary-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-blue focus:border-transparent transition-all duration-200 bg-white placeholder:text-primary-400 w-[200px] sm:w-[250px]"
+                        />
+                    </div>
+                    <button
+                        onClick={downloadCSV}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-primary-700 hover:text-primary-900 hover:bg-primary-50 rounded-xl border border-primary-200 transition-all duration-200 font-medium active:scale-95"
+                    >
                         <Download size={16} />
                         <span className="hidden sm:inline">Download CSV</span>
                     </button>
@@ -39,7 +90,7 @@ export const PostsTable = ({ posts }: PostsTableProps) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {posts.map((post, index) => (
+                        {filteredPosts.map((post, index) => (
                             <tr key={post.postId || index} className="border-b border-primary-100 hover:bg-primary-50/50 transition-colors duration-200 group">
                                 <td className="py-4">
                                     <div className="flex items-center gap-3">
@@ -96,7 +147,7 @@ export const PostsTable = ({ posts }: PostsTableProps) => {
 
             {/* Mobile Card View */}
             <div className="lg:hidden space-y-4">
-                {posts.map((post, index) => (
+                {filteredPosts.map((post, index) => (
                     <div key={post.postId || index} className="bg-primary-50/50 rounded-xl p-4 border border-primary-100 hover:border-primary-200 transition-all duration-200">
                         <div className="flex items-start gap-3 mb-3">
                             <img
@@ -144,6 +195,11 @@ export const PostsTable = ({ posts }: PostsTableProps) => {
                     </div>
                 ))}
             </div>
+            {filteredPosts.length === 0 && (
+                <div className="py-12 text-center">
+                    <div className="text-primary-400 text-sm">No posts found matching your search.</div>
+                </div>
+            )}
         </div>
     );
 };

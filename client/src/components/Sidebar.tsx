@@ -30,7 +30,7 @@ export const Sidebar = () => {
 
     return (
         <aside className={cn(
-            "bg-gradient-to-b from-primary-950 to-primary-900 text-white flex flex-col flex-shrink-0 h-screen sticky top-0 shadow-modern-xl transition-all duration-300 ease-in-out relative",
+            "bg-gradient-to-b from-primary-950 to-primary-900 text-white flex flex-col flex-shrink-0 h-screen sticky top-0 shadow-modern-xl transition-[width] duration-300 ease-in-out relative overflow-hidden",
             isCollapsed ? "w-20" : "w-64"
         )}>
             {/* Toggle Button */}
@@ -41,10 +41,12 @@ export const Sidebar = () => {
                 {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
             </button>
 
-            {/* Logo Area */}
-            <div className="p-6 border-b border-white/10">
-                {!isCollapsed ? (
-                    <div className="flex flex-col gap-2">
+            <div className="p-6 border-b border-white/10 overflow-hidden">
+                <div className={cn(
+                    "transition-all duration-300 ease-in-out",
+                    isCollapsed ? "opacity-0 translate-x-[-20px] absolute pointer-events-none" : "opacity-100 translate-x-0 relative"
+                )}>
+                    <div className="flex flex-col gap-2 min-w-[200px]">
                         <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-primary-200 bg-clip-text text-transparent">
                             STUDIO 1947
                         </h1>
@@ -53,13 +55,16 @@ export const Sidebar = () => {
                             Local Wisdom for Global Impact
                         </p>
                     </div>
-                ) : (
-                    <div className="flex justify-center">
-                        <div className="w-10 h-10 bg-gradient-to-br from-accent-blue to-accent-purple rounded-xl flex items-center justify-center text-sm font-bold">
-                            S47
-                        </div>
+                </div>
+
+                <div className={cn(
+                    "transition-all duration-300 ease-in-out flex justify-center",
+                    isCollapsed ? "opacity-100 scale-100 relative" : "opacity-0 scale-50 absolute pointer-events-none"
+                )}>
+                    <div className="w-10 h-10 bg-gradient-to-br from-accent-blue to-accent-purple rounded-xl flex items-center justify-center text-sm font-bold">
+                        S47
                     </div>
-                )}
+                </div>
             </div>
 
             {/* Navigation */}
@@ -83,53 +88,57 @@ export const Sidebar = () => {
                                 )}
 
                                 <item.icon size={18} className="relative z-10 flex-shrink-0" />
-                                {!isCollapsed && (
-                                    <>
-                                        <span className="relative z-10">{item.label}</span>
-                                        {activeSection === item.id && (
-                                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-blue relative z-10" />
-                                        )}
-                                    </>
-                                )}
+                                <div className={cn(
+                                    "transition-all duration-300 ease-in-out overflow-hidden flex items-center flex-1 whitespace-nowrap",
+                                    isCollapsed ? "opacity-0 w-0 translate-x-[-10px]" : "opacity-100 w-auto translate-x-0"
+                                )}>
+                                    <span className="relative z-10 ml-3">{item.label}</span>
+                                    {activeSection === item.id && (
+                                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-blue relative z-10" />
+                                    )}
+                                </div>
                             </button>
                         </li>
                     ))}
                 </ul>
             </nav>
 
-            {/* User Profile */}
-            <div className="p-4 border-t border-white/10">
-                {!isCollapsed ? (
-                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-all duration-200 group">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20 flex-shrink-0">
-                            HN
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="text-sm font-semibold truncate">Himal Nagarik</div>
-                            <div className="text-xs text-primary-400">@himalnagarik</div>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="text-primary-400 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg"
-                            title="Logout"
-                        >
-                            <LogOut size={16} />
-                        </button>
+            <div className="p-4 border-t border-white/10 overflow-hidden">
+                <div className={cn(
+                    "transition-all duration-300 ease-in-out flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-all duration-200 group relative",
+                    isCollapsed ? "opacity-0 translate-x-[-20px] pointer-events-none" : "opacity-100 translate-x-0"
+                )}>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20 flex-shrink-0">
+                        HN
                     </div>
-                ) : (
-                    <div className="flex flex-col items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20">
-                            HN
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            className="text-primary-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
-                            title="Logout"
-                        >
-                            <LogOut size={16} />
-                        </button>
+                    <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate">Himal Nagarik</div>
+                        <div className="text-xs text-primary-400">@himalnagarik</div>
                     </div>
-                )}
+                    <button
+                        onClick={handleLogout}
+                        className="text-primary-400 hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg"
+                        title="Logout"
+                    >
+                        <LogOut size={16} />
+                    </button>
+                </div>
+
+                <div className={cn(
+                    "transition-all duration-300 ease-in-out flex flex-col items-center gap-3 absolute inset-x-0 bottom-4",
+                    isCollapsed ? "opacity-100 scale-100" : "opacity-0 scale-50 pointer-events-none"
+                )}>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20">
+                        HN
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        className="text-primary-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+                        title="Logout"
+                    >
+                        <LogOut size={16} />
+                    </button>
+                </div>
             </div>
         </aside>
     );
