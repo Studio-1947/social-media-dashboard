@@ -29,7 +29,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
             {/* Sidebar - Responsive */}
             <div className={`
-                fixed lg:static inset-y-0 left-0 z-40
+                fixed lg:sticky lg:top-0 lg:h-screen left-0 z-40
                 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             `}>
