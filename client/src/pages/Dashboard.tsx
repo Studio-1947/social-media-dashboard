@@ -7,20 +7,39 @@ import { PostsTable } from '../components/PostsTable';
 
 export const Dashboard = () => {
     const [instagramData, setInstagramData] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [dateRange, setDateRange] = useState({
+        from: '2025-11-17T00:00:00',
+        to: '2025-12-16T23:59:59'
+    });
 
     useEffect(() => {
         const userId = '4145269';
         const blogId = '5604084';
-        const from = '2025-11-17T00%3A00%3A00';
-        const to = '2025-12-16T23%3A59%3A59';
 
-        fetchInstagramData(userId, blogId, from, to)
+        setIsLoading(true);
+        fetchInstagramData(userId, blogId, dateRange.from, dateRange.to)
             .then(res => {
                 console.log('Instagram Data:', res);
                 setInstagramData(res);
+                setIsLoading(false);
             })
-            .catch(err => console.error('Instagram API Error:', err));
-    }, []);
+            .catch(err => {
+                console.error('Instagram API Error:', err);
+                setIsLoading(false);
+            });
+    }, [dateRange]);
+
+    const handleRangeChange = (from: string, to: string) => {
+        setDateRange({ from, to });
+    };
+
+    const formatDateRangeLabel = () => {
+        const fromDate = new Date(dateRange.from);
+        const toDate = new Date(dateRange.to);
+        const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+        return `${fromDate.toLocaleDateString('en-US', options)} - ${toDate.toLocaleDateString('en-US', options)}`;
+    };
 
     return (
         <DashboardLayout>
@@ -28,7 +47,10 @@ export const Dashboard = () => {
                 {/* Header with date picker */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 lg:mb-8">
                     <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 tracking-tight">Social Media Analytics</h1>
-                    <DateRangePicker />
+                    <DateRangePicker
+                        onRangeChange={handleRangeChange}
+                        currentRangeLabel={formatDateRangeLabel()}
+                    />
                 </div>
 
                 {/* Info Banner */}
@@ -48,7 +70,7 @@ export const Dashboard = () => {
                     </div>
                 </div>
 
-                {instagramData?.data && instagramData.data.length > 0 ? (
+                {!isLoading && instagramData?.data && instagramData.data.length > 0 ? (
                     <>
                         {/* Overview Section - Main Dashboard */}
                         <div id="overview" className="scroll-mt-6">
@@ -69,8 +91,8 @@ export const Dashboard = () => {
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                         </div>
-                        <div className="text-primary-600 text-lg font-semibold">Loading Instagram data...</div>
-                        <div className="text-primary-500 text-sm mt-2">Please wait while we fetch your analytics</div>
+                        <div className="text-primary-600 text-lg font-semibold">{isLoading ? 'Loading Instagram data...' : 'No data found for this period'}</div>
+                        <div className="text-primary-500 text-sm mt-2">{isLoading ? 'Please wait while we fetch your analytics' : 'Try selecting a different date range'}</div>
                     </div>
                 )}
             </div>

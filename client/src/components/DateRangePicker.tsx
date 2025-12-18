@@ -12,39 +12,64 @@ const presets = [
     'Last 12 months'
 ];
 
-export const DateRangePicker = () => {
+interface DateRangePickerProps {
+    onRangeChange: (from: string, to: string) => void;
+    currentRangeLabel: string;
+}
+
+export const DateRangePicker = ({ onRangeChange, currentRangeLabel }: DateRangePickerProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activePreset, setActivePreset] = useState('Last 30 days');
-    const [dateRange, setDateRange] = useState("Nov 17, 2025 - Dec 16, 2025");
 
     const handlePresetClick = (preset: string) => {
         setActivePreset(preset);
-        // In a real app, this would use date-fns to calculate actual ranges
-        // For now, we'll update the label to show it's functional
         const now = new Date();
-        const endDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        let startDate = "";
+        const end = new Date();
+        // Set end to end of today
+        end.setHours(23, 59, 59, 999);
+
+        const start = new Date();
+        // Set start to beginning of day
+        start.setHours(0, 0, 0, 0);
 
         switch (preset) {
             case 'Yesterday':
-                startDate = new Date(now.setDate(now.getDate() - 1)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                setDateRange(`${startDate} - ${startDate}`);
+                start.setDate(now.getDate() - 1);
+                const yesterdayEnd = new Date(start);
+                yesterdayEnd.setHours(23, 59, 59, 999);
+                onRangeChange(formatApiDate(start), formatApiDate(yesterdayEnd));
                 break;
             case 'Last 7 days':
-                startDate = new Date(now.setDate(now.getDate() - 7)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                setDateRange(`${startDate} - ${endDate}`);
+                start.setDate(now.getDate() - 7);
+                onRangeChange(formatApiDate(start), formatApiDate(end));
                 break;
             case 'Last 30 days':
-                startDate = new Date(now.setDate(now.getDate() - 30)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                setDateRange(`${startDate} - ${endDate}`);
+                start.setDate(now.getDate() - 30);
+                onRangeChange(formatApiDate(start), formatApiDate(end));
                 break;
             case 'Current month':
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                setDateRange(`${startDate} - ${endDate}`);
+                start.setDate(1);
+                onRangeChange(formatApiDate(start), formatApiDate(end));
                 break;
-            default:
-                setDateRange("Custom Range Selected");
+            case 'Last 3 months':
+                start.setMonth(now.getMonth() - 3);
+                onRangeChange(formatApiDate(start), formatApiDate(end));
+                break;
+            case 'Last 6 months':
+                start.setMonth(now.getMonth() - 6);
+                onRangeChange(formatApiDate(start), formatApiDate(end));
+                break;
+            case 'Last 12 months':
+                start.setFullYear(now.getFullYear() - 1);
+                onRangeChange(formatApiDate(start), formatApiDate(end));
+                break;
         }
+    };
+
+    const formatApiDate = (date: Date) => {
+        // Format: 2025-11-17T00:00:00
+        const pad = (num: number) => num.toString().padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     };
 
     return (
@@ -54,7 +79,7 @@ export const DateRangePicker = () => {
                 className="flex items-center gap-2 bg-white px-4 py-2.5 rounded-xl border border-primary-200 shadow-modern text-sm font-medium text-primary-900 hover:shadow-modern-lg hover:border-primary-300 transition-all duration-200 active:scale-95"
             >
                 <CalendarIcon size={16} className="text-primary-600" />
-                <span className="font-semibold">{dateRange}</span>
+                <span className="font-semibold">{currentRangeLabel}</span>
                 <ChevronDown size={14} className={cn(
                     "text-primary-400 transition-transform duration-200",
                     isOpen && "rotate-180"
