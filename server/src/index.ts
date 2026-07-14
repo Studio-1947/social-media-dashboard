@@ -1,107 +1,65 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import express, { Request, Response } from 'express';
+
+import express from 'express';
 import cors from 'cors';
-import axios, { AxiosError } from 'axios';
+import { getMetricoolHealth, isMetricoolConfigured } from './config/metricool';
+import { metricoolRouter } from './routes/metricool';
+import { runMetricoolStartupCheck } from './services/metricoolService';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
-app.use(cors());
+const allowedOrigins = (process.env.FRONTEND_URLS || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow same-origin/non-browser callers (curl, health checks).
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+  })
+);
 app.use(express.json());
 
-const METRICOOL_BASE_URL = 'https://app.metricool.com/api';
-const API_KEY = process.env.METRICOOL_API_KEY || 'LMMEBCYTIHSXHCIWOQKNNZOYSXCIRACWWMQQZEVFCMRYVHQXVSRWZDWYGXIOVMFU';
+app.use('/api/metricool', metricoolRouter);
 
-const metricoolClient = axios.create({
-    baseURL: METRICOOL_BASE_URL,
-    headers: {
-        'X-Mc-Auth': API_KEY,
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'application/json'
-    },
-    validateStatus: () => true
+/**
+ * Exposes accumulated Metricool health so uptime monitoring can alert on a
+ * stale token instead of a client noticing their numbers are fake.
+ * Returns 503 when failing, so a plain HTTP check is enough to page on.
+ */
+app.get('/health', (_req, res) => {
+  const metricool = getMetricoolHealth();
+  const httpStatus = metricool.status === 'ok' || metricool.status === 'unknown' ? 200 : 503;
+
+  res.status(httpStatus).json({
+    service: 'social-flow',
+    uptimeSeconds: Math.round(process.uptime()),
+    metricool,
+  });
 });
 
-app.use('/api/metricool', async (req: Request, res: Response) => {
-    const endpoint = req.url;
-    const method = req.method;
-
-    console.log(`[Proxy] ${method} ${endpoint}`);
-
-    try {
-        let targetUrl = endpoint;
-
-        // UPDATED ROUTING - Use working endpoints discovered through testing
-        if (endpoint.includes('/instagram')) {
-            // Use the posts endpoint which we know returns 200
-            targetUrl = endpoint.replace('/instagram', '/v2/analytics/posts/instagram');
-        }
-
-        if (endpoint.includes('/distribution')) {
-            targetUrl = endpoint.replace('/distribution', '/v2/analytics/distribution');
-            if (!targetUrl.includes('subject=')) {
-                targetUrl += `&subject=instagram`;
-            }
-        }
-
-        if (endpoint.includes('/timelines')) {
-            targetUrl = endpoint.replace('/timelines', '/v2/analytics/timelines');
-            if (!targetUrl.includes('subject=')) {
-                targetUrl += `&subject=instagram`;
-            }
-        }
-
-        // New endpoint for profile data
-        if (endpoint.includes('/profile')) {
-            targetUrl = endpoint.replace('/profile', '/admin/simpleProfiles');
-        }
-
-        console.log(`[Proxy] Forwarding to: ${METRICOOL_BASE_URL}${targetUrl}`);
-
-        const response = await metricoolClient.request({
-            url: targetUrl,
-            method: method,
-            data: req.body
-        });
-
-        const contentType = response.headers['content-type'];
-        const isHtml = typeof response.data === 'string' && response.data.trim().startsWith('<');
-
-        if (response.status === 200 && !isHtml) {
-            console.log(`[Proxy] ✅ Success - returned ${JSON.stringify(response.data).length} bytes`);
-            res.status(200).json(response.data);
-        } else if (response.status === 500) {
-            console.log(`[Proxy] ⚠️  Metricool returned 500 - endpoint may not be available for your plan`);
-            res.status(200).json({ data: [], error: "Endpoint not available" });
-        } else {
-            console.log(`[Proxy] API returned status: ${response.status}`);
-            res.status(response.status).json({
-                error: "Metricool API Error",
-                upstreamStatus: response.status
-            });
-        }
-
-    } catch (error) {
-        const err = error as AxiosError;
-        console.error(`[Proxy Error] ${err.message}`);
-
-        if (err.response) {
-            console.error('Status:', err.response.status);
-            res.status(err.response.status).json({
-                error: "Upstream API Error",
-                details: err.response.data
-            });
-        } else {
-            res.status(500).json({ error: "Network Error", details: err.message });
-        }
-    }
-});
-
-app.get('/', (req, res) => {
-    res.send('Social Media Dashboard API (TypeScript) - Ready');
+app.get('/', (_req, res) => {
+  res.json({ service: 'Social Flow API', status: 'ready' });
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`\n  Social Flow API — http://localhost:${PORT}\n`);
+
+  if (!isMetricoolConfigured()) {
+    console.error(
+      '[Metricool] NOT CONFIGURED — set METRICOOL_API_TOKEN and METRICOOL_USER_ID in .env. ' +
+        'Every analytics request will fail with 503 until you do.'
+    );
+    return;
+  }
+
+  void runMetricoolStartupCheck();
 });
+
+export default app;

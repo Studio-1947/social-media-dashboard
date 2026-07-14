@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { Download, Search } from 'lucide-react';
+import { Download, Search, Image as ImageIcon } from 'lucide-react';
 
 interface PostsTableProps {
     posts: any[];
+    network: 'facebook' | 'instagram';
 }
 
-export const PostsTable = ({ posts }: PostsTableProps) => {
+const NETWORK_LABEL: Record<PostsTableProps['network'], string> = {
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+};
+
+export const PostsTable = ({ posts, network }: PostsTableProps) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredPosts = posts.filter(post => {
@@ -40,7 +46,7 @@ export const PostsTable = ({ posts }: PostsTableProps) => {
         if (link.download !== undefined) {
             const url = URL.createObjectURL(blob);
             link.setAttribute('href', url);
-            link.setAttribute('download', `instagram_posts_${new Date().toISOString().split('T')[0]}.csv`);
+            link.setAttribute('download', `${network}_posts_${new Date().toISOString().split('T')[0]}.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -94,24 +100,28 @@ export const PostsTable = ({ posts }: PostsTableProps) => {
                             <tr key={post.postId || index} className="border-b border-primary-100 hover:bg-primary-50/50 transition-colors duration-200 group">
                                 <td className="py-4">
                                     <div className="flex items-center gap-3">
-                                        <img
-                                            src={post.imageUrl || 'https://via.placeholder.com/48'}
-                                            alt="Post thumbnail"
-                                            className="w-12 h-12 rounded-lg object-cover bg-primary-100 ring-2 ring-primary-100 group-hover:ring-primary-200 transition-all duration-200"
-                                            onError={(e) => {
-                                                const target = e.target as HTMLImageElement;
-                                                target.src = 'https://via.placeholder.com/48?text=No+Image';
-                                            }}
-                                        />
+                                        {post.imageUrl ? (
+                                            <img
+                                                src={post.imageUrl}
+                                                alt="Post thumbnail"
+                                                className="w-12 h-12 rounded-lg object-cover bg-primary-100 ring-2 ring-primary-100 group-hover:ring-primary-200 transition-all duration-200"
+                                            />
+                                        ) : (
+                                            <div className="w-12 h-12 rounded-lg bg-primary-100 ring-2 ring-primary-100 flex items-center justify-center text-primary-400">
+                                                <ImageIcon size={18} />
+                                            </div>
+                                        )}
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm text-primary-900 truncate max-w-[250px] font-medium">
                                                 {post.content?.split('\n')[0] || post.caption?.split('\n')[0] || `Post from ${new Date(post.publishedAt?.dateTime).toLocaleDateString()}`}
                                             </div>
-                                            <div className="text-xs text-primary-500 mt-1">
-                                                <a href={post.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent-blue transition-colors">
-                                                    View on Instagram →
-                                                </a>
-                                            </div>
+                                            {post.url && (
+                                                <div className="text-xs text-primary-500 mt-1">
+                                                    <a href={post.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent-blue transition-colors">
+                                                        View on {NETWORK_LABEL[network]} →
+                                                    </a>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </td>
@@ -150,15 +160,17 @@ export const PostsTable = ({ posts }: PostsTableProps) => {
                 {filteredPosts.map((post, index) => (
                     <div key={post.postId || index} className="bg-primary-50/50 rounded-xl p-4 border border-primary-100 hover:border-primary-200 transition-all duration-200">
                         <div className="flex items-start gap-3 mb-3">
-                            <img
-                                src={post.imageUrl || 'https://via.placeholder.com/64'}
-                                alt="Post thumbnail"
-                                className="w-16 h-16 rounded-lg object-cover bg-primary-100"
-                                onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.src = 'https://via.placeholder.com/64?text=No+Image';
-                                }}
-                            />
+                            {post.imageUrl ? (
+                                <img
+                                    src={post.imageUrl}
+                                    alt="Post thumbnail"
+                                    className="w-16 h-16 rounded-lg object-cover bg-primary-100"
+                                />
+                            ) : (
+                                <div className="w-16 h-16 rounded-lg bg-primary-100 flex items-center justify-center text-primary-400 flex-shrink-0">
+                                    <ImageIcon size={20} />
+                                </div>
+                            )}
                             <div className="flex-1 min-w-0">
                                 <div className="text-sm text-primary-900 font-medium mb-1 line-clamp-2">
                                     {post.content?.split('\n')[0] || post.caption?.split('\n')[0] || `Post from ${new Date(post.publishedAt?.dateTime).toLocaleDateString()}`}

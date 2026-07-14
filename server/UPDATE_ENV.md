@@ -1,35 +1,34 @@
-# 🔥 IMPORTANT: Update Your Backend .env File
+# Backend `.env` setup
 
-To enable CORS for your deployed frontend, you need to update your `server/.env` file.
+`server/.env` is not in git, so it drifts between local, Vercel and the VPS.
+A wrong value here does **not** crash anything — the dashboard quietly degrades to
+badged sample data. Assume nothing; verify after every change (see below).
 
-## Action Required
-
-Add or update the following line in `server/.env`:
-
-```env
-FRONTEND_URLS=http://localhost:5173,https://social-media-dashboard-one-chi.vercel.app
-```
-
-## Complete .env File Should Look Like:
+Copy `.env.example` to `.env` and fill in the real values:
 
 ```env
 PORT=5000
-METRICOOL_API_KEY=your_actual_api_key_here
 FRONTEND_URLS=http://localhost:5173,https://social-media-dashboard-one-chi.vercel.app
+
+METRICOOL_BASE_URL=https://app.metricool.com
+METRICOOL_API_TOKEN=<token from Metricool → Settings → API>
+METRICOOL_USER_ID=<numeric userId — same for every brand on the account>
+METRICOOL_BLOG_ID=<numeric blogId of the DEFAULT client; a fallback only>
+METRICOOL_DEFAULT_TIMEZONE=Asia/Kolkata
 ```
 
-## After Updating
+All three Metricool credentials are account-wide except `METRICOOL_BLOG_ID`, which
+identifies one client. Every real request from the dashboard carries an explicit
+`blogId` from the client switcher — the env var is only used when a request omits one.
 
-1. Save the file
-2. Restart your backend server (the terminal will auto-restart if using `npm run dev`)
-3. Your backend will now accept requests from both:
-   - `http://localhost:5173` (local development)
-   - `https://social-media-dashboard-one-chi.vercel.app` (deployed frontend)
+## Verify after any change
 
-## What Changed?
+Restart the server and check **both**:
 
-- ✅ Backend now has dynamic CORS configuration
-- ✅ Frontend now uses environment-based API URL
-- ✅ Both can work in development and production seamlessly
+1. The boot log prints the self-check result. You want:
+   `[Metricool] OK — N client(s) available. Default: "…" (blogId …). Networks: …`
+   A failure prints `[Metricool] STARTUP CHECK FAILED — …` with the HTTP status.
+2. `GET /health` returns `"status": "ok"`. It returns HTTP 503 when Metricool is
+   failing, so uptime monitoring can alert on a stale token directly.
 
-See [deployment_guide.md](file:///c:/Users/soumi_wo2im7/.gemini/antigravity/brain/3861575a-80a0-4395-8cce-38c0ec1262ef/deployment_guide.md) for complete deployment instructions.
+If you skip this, a bad token looks identical to "a quiet month" in the UI.

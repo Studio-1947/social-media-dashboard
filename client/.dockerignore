@@ -1,0 +1,14 @@
+node_modules
+dist
+npm-debug.log*
+
+.env
+.env.*
+!.env.example
+
+Dockerfile
+.dockerignore
+*.md
+
+# NOTE: nginx.conf is deliberately NOT ignored — the prod stage COPYs it into the
+# image, and excluding it here breaks the build with a confusing "not found".

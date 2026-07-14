@@ -1,0 +1,13 @@
+node_modules
+dist
+npm-debug.log*
+
+# Credentials must come from compose's env_file at run time, never be baked into
+# an image layer.
+.env
+.env.*
+!.env.example
+
+Dockerfile
+.dockerignore
+*.md
