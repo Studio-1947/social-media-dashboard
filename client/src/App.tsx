@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Admin } from './pages/Admin';
+import { Rollup } from './pages/Rollup';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -39,6 +40,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute requireAdmin>
             <Admin />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/rollup"
+        element={
+          <ProtectedRoute>
+            <Rollup />
           </ProtectedRoute>
         }
       />

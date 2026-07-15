@@ -1,19 +1,24 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     Lightbulb,
     TrendingUp,
+    TrendingDown,
+    Minus,
     Clock,
     CalendarDays,
     Type,
     Hash,
     AlertTriangle,
     ChevronDown,
+    Users,
 } from 'lucide-react';
 import { ErrorPanel, LoadingPanel, Panel } from './AnalyticsPanels';
 import { useInsights } from '../hooks/useMetricool';
 import { cn } from '../lib/utils';
+import { percentDelta } from '../lib/series';
+import { getPreviousPeriod } from '../lib/dateRange';
 import type { DateRange, Network } from '../services/metricoolApi';
-import type { Bucket, Confidence, Insights } from '../types/insights';
+import type { Bucket, CompetitorBenchmark, Confidence, Insights } from '../types/insights';
 
 /**
  * "What's working / what to post next" — written for the client, not an analyst.
@@ -86,10 +91,90 @@ function compareToAverage(liftPct: number): { text: string; tone: 'up' | 'down' 
     return { text: 'about the same as usual', tone: 'flat' };
 }
 
+/**
+ * "Is this account's typical post doing better or worse than last period" —
+ * distinct from every bucket comparison above, which is always relative to
+ * THIS window's own average. Below MEANINGFUL_LIFT the wording says "holding
+ * steady" rather than manufacturing a direction out of noise.
+ */
+const BaselineTrend = ({
+    currentMedian,
+    previousMedian,
+    previousPosts,
+}: {
+    currentMedian: number;
+    previousMedian: number | null;
+    previousPosts: number;
+}) => {
+    // previousPosts gates on the SAME reliability floor as everything else here
+    // (MIN_SAMPLE on the server) — too few prior posts and "last period" isn't a
+    // real baseline to compare against.
+    if (previousMedian === null || previousPosts < 5) return null;
+
+    const pct = percentDelta(currentMedian, previousMedian);
+    if (pct === null) return null;
+
+    const tone: 'up' | 'down' | 'flat' = pct >= 3 ? 'up' : pct <= -3 ? 'down' : 'flat';
+    const Icon = tone === 'up' ? TrendingUp : tone === 'down' ? TrendingDown : Minus;
+    const text =
+        tone === 'flat'
+            ? 'about the same as last period'
+            : `${Math.round(Math.abs(pct))}% ${tone === 'up' ? 'better' : 'worse'} than last period`;
+
+    return (
+        <div
+            className={cn(
+                'flex items-center gap-1.5 text-sm font-semibold',
+                tone === 'up' && 'text-accent-green',
+                tone === 'down' && 'text-accent-red',
+                tone === 'flat' && 'text-primary-500'
+            )}
+        >
+            <Icon size={15} />
+            <span>The typical post is {text}</span>
+        </div>
+    );
+};
+
+/**
+ * How this account's typical post compares to the median of its tracked
+ * competitors — omitted entirely (not a fabricated tie) below MIN_COMPETITORS
+ * on the server, since 1-2 competitors is one or two accounts' noise, not a
+ * benchmark.
+ */
+const CompetitorBenchmarkNote = ({ benchmark }: { benchmark: CompetitorBenchmark | null }) => {
+    if (!benchmark) return null;
+
+    const { liftPct, competitorCount } = benchmark;
+    const tone: 'up' | 'down' | 'flat' = liftPct >= 3 ? 'up' : liftPct <= -3 ? 'down' : 'flat';
+    const text =
+        tone === 'flat'
+            ? 'about level with'
+            : `${Math.round(Math.abs(liftPct))}% ${tone === 'up' ? 'above' : 'below'}`;
+
+    return (
+        <div
+            className={cn(
+                'flex items-center gap-1.5 text-sm font-semibold',
+                tone === 'up' && 'text-accent-green',
+                tone === 'down' && 'text-accent-red',
+                tone === 'flat' && 'text-primary-500'
+            )}
+        >
+            <Users size={15} />
+            <span>
+                Engagement is {text} the {competitorCount} tracked competitor
+                {competitorCount === 1 ? '' : 's'}
+            </span>
+        </div>
+    );
+};
+
 /* ------------------------------------------------------------------ */
 
 /** Builds the single plain-English recommendation sentence. */
-function buildAdvice(insights: Insights): string {
+/** Exported for the Overview report — same recommendation sentence, no second copy of the wording. */
+export function buildAdvice(insights: Insights): string {
     const r = insights.recommendation;
     const network = insights.network === 'facebook' ? 'Facebook' : 'Instagram';
 
@@ -370,6 +455,12 @@ export const InsightsView = ({
     const { insights, loading, error, reload } = useInsights(network, range, blogId, enabled);
     const accent = network === 'facebook' ? '#1877F2' : '#E1306C';
 
+    // Previous period, fetched only for its baseline — same pattern as the
+    // Overview tabs' trend pills (see FacebookView/InstagramView), just against
+    // the insights endpoint instead of raw timelines.
+    const previousRange = useMemo(() => getPreviousPeriod(range), [range]);
+    const prevInsights = useInsights(network, previousRange, blogId, enabled);
+
     if (loading) return <LoadingPanel label="Reading this account's past posts…" />;
     if (error) return <ErrorPanel message={error} onRetry={reload} />;
     if (!insights) return null;
@@ -386,6 +477,17 @@ export const InsightsView = ({
                     guide based on real history — not a guarantee — and any group with too few posts to be
                     sure is left out.
                 </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                {!prevInsights.loading && !prevInsights.error && (
+                    <BaselineTrend
+                        currentMedian={insights.baseline.medianEngagement}
+                        previousMedian={prevInsights.insights?.baseline.medianEngagement ?? null}
+                        previousPosts={prevInsights.insights?.totalPosts ?? 0}
+                    />
+                )}
+                <CompetitorBenchmarkNote benchmark={insights.competitorBenchmark} />
             </div>
 
             <Recommendation insights={insights} accent={accent} />

@@ -148,6 +148,41 @@ export function percentDelta(current: number | null, previous: number | null): n
     return ((current - previous) / previous) * 100;
 }
 
+export interface DistributionShift {
+    label: string;
+    currentPct: number;
+    /** Percentage-POINT change vs. the previous period. `null` when that label
+     *  has no usable previous-period data — omit the comparison, don't fabricate it. */
+    deltaPts: number | null;
+}
+
+/**
+ * How the current period's largest category has moved since the previous
+ * period, e.g. "India, 42% of followers, +3pts vs last period." Only the
+ * current top row is tracked — a full per-row diff reads as noise on charts
+ * with 8+ categories, while "did the leader change / grow" is the one
+ * question worth surfacing at a glance.
+ */
+export function topCategoryShift(
+    current: DistributionRow[],
+    previous: DistributionRow[]
+): DistributionShift | null {
+    if (current.length === 0) return null;
+
+    const top = [...current].sort((a, b) => b.value - a.value)[0];
+    const currentTotal = current.reduce((sum, r) => sum + r.value, 0);
+    if (currentTotal <= 0) return null;
+
+    const currentPct = (top.value / currentTotal) * 100;
+    const previousTotal = previous.reduce((sum, r) => sum + r.value, 0);
+    const previousRow = previous.find((r) => r.label === top.label);
+
+    const deltaPts =
+        previousTotal > 0 && previousRow ? currentPct - (previousRow.value / previousTotal) * 100 : null;
+
+    return { label: top.label, currentPct, deltaPts };
+}
+
 /** Chart-friendly short date, e.g. "Nov 17". */
 export function formatChartDate(iso: string): string {
     const d = new Date(iso);

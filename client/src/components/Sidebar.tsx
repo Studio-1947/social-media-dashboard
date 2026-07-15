@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, ChevronLeft, ChevronRight, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, AlertTriangle, ShieldCheck, LayoutGrid } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -56,6 +56,11 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
 
     const goToAdmin = () => {
         navigate('/admin');
+        onNavigate?.();
+    };
+
+    const goToRollup = () => {
+        navigate('/rollup');
         onNavigate?.();
     };
 
@@ -242,6 +247,24 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                         </div>
                     </div>
                 )}
+
+                {/* Rollup — every signed-in user's clients, not gated on role. Unlike
+                    Admin below, there's no server-side permission this could violate;
+                    it just re-runs the same per-client Insights call this account
+                    could already make one at a time. */}
+                <div className="flex-shrink-0 px-3 pb-2">
+                    <button
+                        onClick={goToRollup}
+                        title="Client rollup"
+                        className={cn(
+                            'flex items-center gap-2.5 rounded-xl font-semibold text-primary-300 hover:text-white hover:bg-white/5 transition-all duration-200',
+                            isCollapsed ? 'w-11 h-11 justify-center mx-auto' : 'w-full px-3 py-2 text-sm'
+                        )}
+                    >
+                        <LayoutGrid size={16} className="flex-shrink-0" />
+                        {!isCollapsed && <span className="truncate">Client rollup</span>}
+                    </button>
+                </div>
 
                 {/* Admin panel entry — only rendered for an admin. Hiding it for a
                     member isn't the security boundary (every /api/admin route

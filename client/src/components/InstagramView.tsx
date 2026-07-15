@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
     DistributionChart,
+    DistributionTrendNote,
     ErrorPanel,
     LoadingPanel,
     MultiLineChart,
@@ -12,9 +13,11 @@ import { SubTabs, type SubTab } from './SubTabs';
 import { PostsTable } from './PostsTable';
 import { CompetitorsPanel } from './CompetitorsPanel';
 import { InsightsView } from './InsightsView';
-import { TopPostsSpotlight } from './TopPostsSpotlight';
+import { TopPostsSpotlight, UnderperformingPostsSpotlight } from './TopPostsSpotlight';
+import { ReportExportButton } from './ReportExportButton';
 import { useDistributions, useHasCompetitors, usePosts, useTimelines } from '../hooks/useMetricool';
-import { latestValue, percentDelta, sumSeries } from '../lib/series';
+import { latestValue, percentDelta, sumSeries, topCategoryShift } from '../lib/series';
+import { toReportStat, type ReportStat } from '../lib/report';
 import { getPreviousPeriod } from '../lib/dateRange';
 import { countryName } from '../lib/countryNames';
 import { socialFlowBrand } from '../config/brand';
@@ -37,6 +40,8 @@ const TIMELINE_KEYS = [
 /** Instagram, unlike Facebook, still reports age and gender. */
 const DISTRIBUTION_KEYS = ['gender', 'age', 'country', 'city', 'postsTypes'];
 
+const genderLabel = (l: string) => ({ F: 'Female', M: 'Male', U: 'Unknown' })[l] ?? l;
+
 export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: number }) => {
     const [tab, setTab] = useState('overview');
 
@@ -48,10 +53,11 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
     const posts = usePosts('instagram', range, blogId, true);
     const hasCompetitors = useHasCompetitors('instagram', range, blogId);
 
-    // Previous-period timelines, for the "vs last period" trend pills. A second,
-    // independent request — same keys, shifted window — not a new endpoint.
+    // Previous period, shared by every "vs last period" comparison below — the
+    // timelines trend pills AND the Audience tab's distribution shift note.
     const previousRange = useMemo(() => getPreviousPeriod(range), [range]);
     const prevTimelines = useTimelines('instagram', TIMELINE_KEYS, previousRange, blogId);
+    const prevDistributions = useDistributions('instagram', DISTRIBUTION_KEYS, previousRange, blogId);
 
     if (timelines.loading) return <LoadingPanel label="Loading Instagram analytics…" />;
     if (timelines.error) {
@@ -76,9 +82,18 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
         return pct === null ? null : { pct };
     };
 
+    // Same "not ready yet" guard as prevTimelines, applied to the Audience tab's
+    // distribution comparison instead of the Overview stat cards.
+    const prevDistReady = !prevDistributions.loading && !prevDistributions.error;
+    const shiftOf = (key: string) =>
+        prevDistReady
+            ? topCategoryShift(distributions.rows[key] ?? [], prevDistributions.rows[key] ?? [])
+            : null;
+
     // delta_followers is one signed series covering both directions — Metricool
     // has no separate gained/lost metric for Instagram. Empty on smaller accounts.
     const delta = total('deltaFollowers');
+    const netChangeDisplay = delta === null ? null : delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString();
 
     const reach = total('reach');
     const postsPublished = total('postsCount');
@@ -91,9 +106,16 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
     // Account-level engagement rate: interactions as a share of reach for the
     // whole period. Distinct from the per-post engagementRate shown in the Posts
     // tab (which divides by impressions).
-    const engagementRate =
-        interactions !== null && reach !== null && reach > 0
-            ? `${((interactions / reach) * 100).toFixed(1)}%`
+    const engagementRateNum =
+        interactions !== null && reach !== null && reach > 0 ? (interactions / reach) * 100 : null;
+    const engagementRate = engagementRateNum !== null ? `${engagementRateNum.toFixed(1)}%` : null;
+
+    // Same ratio computed over the previous period, purely for the trend pill.
+    const prevReachVal = prevTotal('reach');
+    const prevInteractionsVal = prevTotal('interactions');
+    const prevEngagementRateNum =
+        prevInteractionsVal !== null && prevReachVal !== null && prevReachVal > 0
+            ? (prevInteractionsVal / prevReachVal) * 100
             : null;
 
     const tabs: SubTab[] = [
@@ -104,12 +126,38 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
         ...(hasCompetitors ? [{ key: 'competitors', label: 'Competitors' }] : []),
     ];
 
+    // Same numbers already on the Overview stat cards below — the report is a
+    // download of what's on screen, not a separate data pull.
+    const reportStats: ReportStat[] = [
+        toReportStat('Followers', latest('followers'), trendOf(latest('followers'), prevLatest('followers'))),
+        toReportStat('Net change', netChangeDisplay),
+        toReportStat('Profile views', total('profileViews')),
+        toReportStat('Reach', reach, trendOf(reach, prevTotal('reach'))),
+        toReportStat('Engagement rate', engagementRate, trendOf(engagementRateNum, prevEngagementRateNum)),
+        toReportStat('Impressions', total('impressions')),
+        toReportStat('Accounts engaged', total('accountsEngaged')),
+        toReportStat('Website clicks', total('clicks')),
+        toReportStat('Interactions', interactions, trendOf(interactions, prevTotal('interactions'))),
+        toReportStat('Posts published', postsPublished),
+        toReportStat('Interactions per post', perPost),
+    ];
+
     return (
         <div className="space-y-6 animate-fade-in">
             <SubTabs tabs={tabs} active={tab} onChange={setTab} accent={ACCENT} />
 
             {tab === 'overview' && (
                 <>
+                    <div className="flex justify-end -mb-2">
+                        <ReportExportButton
+                            network="instagram"
+                            range={range}
+                            blogId={blogId}
+                            stats={reportStats}
+                            supportsInsights
+                        />
+                    </div>
+
                     <Panel title="Community Growth" subtitle="Followers over the selected period">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                             <StatCard
@@ -118,16 +166,7 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                                 emphasis
                                 trend={trendOf(latest('followers'), prevLatest('followers'))}
                             />
-                            <StatCard
-                                label="Net change"
-                                value={
-                                    delta === null
-                                        ? null
-                                        : delta > 0
-                                          ? `+${delta.toLocaleString()}`
-                                          : delta.toLocaleString()
-                                }
-                            />
+                            <StatCard label="Net change" value={netChangeDisplay} />
                             {/* profile_views is empty across every client on this account. */}
                             <StatCard label="Profile views" value={total('profileViews')} />
                         </div>
@@ -149,6 +188,7 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                                 value={engagementRate}
                                 emphasis
                                 hint="Interactions as a share of reach for this period"
+                                trend={trendOf(engagementRateNum, prevEngagementRateNum)}
                             />
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -194,7 +234,10 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                     </Panel>
 
                     {!posts.loading && !posts.error && (
-                        <TopPostsSpotlight posts={posts.posts} network="instagram" />
+                        <>
+                            <TopPostsSpotlight posts={posts.posts} network="instagram" />
+                            <UnderperformingPostsSpotlight posts={posts.posts} network="instagram" />
+                        </>
                     )}
                 </>
             )}
@@ -210,14 +253,14 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                                     <DistributionChart
                                         rows={distributions.rows.gender ?? []}
                                         asPercentage
-                                        formatLabel={(l) =>
-                                            ({ F: 'Female', M: 'Male', U: 'Unknown' })[l] ?? l
-                                        }
+                                        formatLabel={genderLabel}
                                     />
+                                    <DistributionTrendNote shift={shiftOf('gender')} formatLabel={genderLabel} />
                                 </Panel>
 
                                 <Panel title="Age">
                                     <DistributionChart rows={distributions.rows.age ?? []} asPercentage />
+                                    <DistributionTrendNote shift={shiftOf('age')} />
                                 </Panel>
                             </div>
 
@@ -226,14 +269,17 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                                     rows={distributions.rows.country ?? []}
                                     formatLabel={countryName}
                                 />
+                                <DistributionTrendNote shift={shiftOf('country')} formatLabel={countryName} />
                             </Panel>
 
                             <Panel title="Followers by city">
                                 <DistributionChart rows={distributions.rows.city ?? []} />
+                                <DistributionTrendNote shift={shiftOf('city')} />
                             </Panel>
 
                             <Panel title="Content types">
                                 <DistributionChart rows={distributions.rows.postsTypes ?? []} />
+                                <DistributionTrendNote shift={shiftOf('postsTypes')} />
                             </Panel>
                         </>
                     )}

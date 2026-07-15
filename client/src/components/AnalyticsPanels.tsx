@@ -15,7 +15,12 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { formatChartDate, type DistributionRow, type SeriesPoint } from '../lib/series';
+import {
+    formatChartDate,
+    type DistributionRow,
+    type DistributionShift,
+    type SeriesPoint,
+} from '../lib/series';
 import { cn } from '../lib/utils';
 
 /**
@@ -121,7 +126,8 @@ export const StatCard = ({ label, value, hint, emphasis, trend }: StatCardProps)
 /* ------------------------------------------------------------------ */
 
 export interface PanelProps {
-    title: string;
+    /** Usually a string; accepts a node for panels with an interactive header (e.g. a collapse toggle). */
+    title: ReactNode;
     subtitle?: string;
     children: ReactNode;
     className?: string;
@@ -299,6 +305,47 @@ export const DistributionChart = ({
                     </Bar>
                 </BarChart>
             </ResponsiveContainer>
+        </div>
+    );
+};
+
+/**
+ * "India is still your biggest audience, and it grew 3pts vs last period" —
+ * a one-line trend note for a DistributionChart, computed by topCategoryShift().
+ * Renders nothing when there's no previous-period data for the current leader
+ * (new category, or the previous fetch is still loading/failed) — an absent
+ * comparison, not a fabricated one.
+ */
+export const DistributionTrendNote = ({
+    shift,
+    formatLabel = (l) => l,
+}: {
+    shift: DistributionShift | null;
+    formatLabel?: (label: string) => string;
+}) => {
+    if (!shift || shift.deltaPts === null) return null;
+
+    const tone: 'up' | 'down' | 'flat' =
+        shift.deltaPts >= 1 ? 'up' : shift.deltaPts <= -1 ? 'down' : 'flat';
+    const Icon = tone === 'up' ? ArrowUp : tone === 'down' ? ArrowDown : Minus;
+
+    return (
+        <div
+            className={cn(
+                'flex items-center gap-1.5 text-xs font-medium mt-3',
+                tone === 'up' && 'text-accent-green',
+                tone === 'down' && 'text-accent-red',
+                tone === 'flat' && 'text-primary-500'
+            )}
+        >
+            <Icon size={12} />
+            <span>
+                <span className="font-semibold">{formatLabel(shift.label)}</span> is still the largest
+                group at {shift.currentPct.toFixed(1)}%
+                {tone !== 'flat' && (
+                    <> — {Math.abs(shift.deltaPts).toFixed(1)}pts {tone === 'up' ? 'up' : 'down'} vs last period</>
+                )}
+            </span>
         </div>
     );
 };

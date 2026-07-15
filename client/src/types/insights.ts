@@ -19,6 +19,13 @@ export interface Bucket {
 
 export type Confidence = 'high' | 'medium' | 'low' | 'insufficient';
 
+export interface CompetitorBenchmark {
+    medianEngagement: number;
+    competitorCount: number;
+    /** % difference between this account's baseline and the competitor median. */
+    liftPct: number;
+}
+
 export interface HashtagStat {
     tag: string;
     n: number;
@@ -42,6 +49,8 @@ export interface Insights {
     timezone: string;
     totalPosts: number;
     baseline: { medianEngagement: number; medianReach: number };
+    /** null when fewer than 3 competitors are tracked for this brand. */
+    competitorBenchmark: CompetitorBenchmark | null;
     byType: Bucket[];
     byWeekday: Bucket[];
     byHourBand: Bucket[];

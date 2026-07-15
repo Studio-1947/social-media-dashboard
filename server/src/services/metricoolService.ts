@@ -432,6 +432,38 @@ export async function fetchCompetitors({ network, from, to, blogId, timezone }: 
   return { data, supported: true };
 }
 
+/**
+ * Parsed engagement figures for this client's tracked competitors, for the
+ * Insights benchmark (insightsService.ts) — as opposed to fetchCompetitors()
+ * above, which hands the raw payload straight to the Competitors tab.
+ *
+ * Returns `[]` (never throws) whenever there's nothing to compare against:
+ * network doesn't support competitors, none are configured for this brand, or
+ * the request itself fails. A missing benchmark is the honest "not enough
+ * data" case, not a reason to break the rest of the insights response.
+ */
+export async function fetchCompetitorEngagements(request: PostsRequest): Promise<number[]> {
+  try {
+    const { data, supported } = await fetchCompetitors(request);
+    if (!supported) return [];
+
+    // Same one-level unwrap as fetchPosts — { data: [...] }, not the deeper
+    // per-metric nesting the timelines/distribution endpoints use.
+    const items: unknown[] = Array.isArray(data)
+      ? data
+      : Array.isArray((data as any)?.data)
+        ? (data as any).data
+        : [];
+
+    return items
+      .filter((r): r is Record<string, any> => Boolean(r) && typeof r === 'object')
+      .map((r) => num(r.engagement))
+      .filter((e) => e > 0);
+  } catch {
+    return [];
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Startup self-check                                                  */
 /* ------------------------------------------------------------------ */

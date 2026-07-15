@@ -1,7 +1,7 @@
 import { Network } from '../metrics';
 import { METRICOOL_DEFAULT_TIMEZONE } from '../config/metricool';
 import { WEEKDAY_NAMES, partsInZone } from '../lib/time';
-import { fetchPosts, type Post } from './metricoolService';
+import { fetchCompetitorEngagements, fetchPosts, type Post } from './metricoolService';
 
 /**
  * Post-performance insights: what's working, and what to publish next.
@@ -25,6 +25,15 @@ import { fetchPosts, type Post } from './metricoolService';
 
 /** Below this a bucket is greyed out and never drives advice. */
 const MIN_SAMPLE = 5;
+
+/**
+ * Below this many tracked competitors, a median engagement figure is one or
+ * two accounts' noise, not a benchmark. Deliberately lower than MIN_SAMPLE —
+ * unlike posts (where more data just means posting more), the competitor
+ * count is a fixed configuration choice made once inside Metricool, so 3 is
+ * the floor rather than a temporary "not enough yet" state.
+ */
+const MIN_COMPETITORS = 3;
 
 /**
  * A bucket must clear THIS to be *recommended* (as opposed to merely shown). The
@@ -80,11 +89,20 @@ export interface Bucket {
 
 export type Confidence = 'high' | 'medium' | 'low' | 'insufficient';
 
+export interface CompetitorBenchmark {
+  medianEngagement: number;
+  competitorCount: number;
+  /** % difference between this account's baseline and the competitor median. */
+  liftPct: number;
+}
+
 export interface Insights {
   network: Network;
   timezone: string;
   totalPosts: number;
   baseline: { medianEngagement: number; medianReach: number };
+  /** null when fewer than MIN_COMPETITORS are tracked for this brand — not shown as a fake tie. */
+  competitorBenchmark: CompetitorBenchmark | null;
   byType: Bucket[];
   byWeekday: Bucket[];
   byHourBand: Bucket[];
@@ -227,7 +245,13 @@ export async function computeInsights({
   timezone,
 }: InsightsRequest): Promise<Insights> {
   const tz = timezone || METRICOOL_DEFAULT_TIMEZONE;
-  const { data } = await fetchPosts({ network, from, to, blogId, timezone: tz });
+  // Fetched together: competitors are an independent, optional lookup and must
+  // never slow down or block the account's own post analysis (which is why
+  // fetchCompetitorEngagements swallows its own errors and returns []).
+  const [{ data }, competitorEngagements] = await Promise.all([
+    fetchPosts({ network, from, to, blogId, timezone: tz }),
+    fetchCompetitorEngagements({ network, from, to, blogId, timezone: tz }),
+  ]);
   const all = data as Post[];
 
   // A post with no impressions never had a chance to engage anyone; including it
@@ -371,6 +395,17 @@ export async function computeInsights({
     }
   }
 
+  let competitorBenchmark: CompetitorBenchmark | null = null;
+  if (competitorEngagements.length >= MIN_COMPETITORS) {
+    const competitorMedian = median(competitorEngagements);
+    competitorBenchmark = {
+      medianEngagement: round2(competitorMedian),
+      competitorCount: competitorEngagements.length,
+      liftPct:
+        competitorMedian > 0 ? round2((baselineEngagement / competitorMedian - 1) * 100) : 0,
+    };
+  }
+
   return {
     network,
     timezone: tz,
@@ -379,6 +414,7 @@ export async function computeInsights({
       medianEngagement: round2(baselineEngagement),
       medianReach: Math.round(baselineReach),
     },
+    competitorBenchmark,
     byType,
     byWeekday,
     byHourBand,
