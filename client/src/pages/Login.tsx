@@ -26,7 +26,7 @@ export const Login = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col lg:flex-row">
+        <div className="min-h-dvh flex flex-col lg:flex-row">
             {/* Left Half - Branding Section */}
             <div className="lg:w-1/2 bg-gradient-to-br from-primary-950 via-primary-900 to-primary-950 p-8 lg:p-16 flex flex-col justify-between relative overflow-hidden">
                 {/* Animated Background Elements */}

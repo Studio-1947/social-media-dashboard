@@ -14,7 +14,6 @@ import {
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { ErrorPanel, LoadingPanel, Panel } from '../components/AnalyticsPanels';
 import { useAuth } from '../contexts/AuthContext';
-import { SelectionProvider } from '../contexts/SelectionContext';
 import {
     createUser,
     deleteUser,
@@ -290,34 +289,31 @@ export const Admin = () => {
     };
 
     // DashboardLayout renders the Sidebar, which reads useSelection() unconditionally
-    // (it drives the client/network switcher on the Dashboard page) — without this
-    // Provider as an ancestor, that hook throws the instant the Sidebar mounts, and
-    // with no error boundary anywhere in the app, React silently unmounts the whole
-    // tree. That's what a blank white page on /admin actually was: not "nothing
-    // rendered," but "something threw and React gave up quietly."
+    // (it drives the client/network switcher on the Dashboard page) — without a
+    // SelectionProvider as an ancestor, that hook throws the instant the Sidebar
+    // mounts, and with no error boundary anywhere in the app, React silently
+    // unmounts the whole tree. That's what a blank white page on /admin actually
+    // was: not "nothing rendered," but "something threw and React gave up
+    // quietly." The provider itself now lives once in App.tsx, shared with every
+    // other authenticated page — this component only needs to render under it.
     if (error) {
         return (
-            <SelectionProvider>
-                <DashboardLayout>
-                    <ErrorPanel message={error} onRetry={load} />
-                </DashboardLayout>
-            </SelectionProvider>
+            <DashboardLayout>
+                <ErrorPanel message={error} onRetry={load} />
+            </DashboardLayout>
         );
     }
     if (!users) {
         return (
-            <SelectionProvider>
-                <DashboardLayout>
-                    <LoadingPanel label="Loading team…" />
-                </DashboardLayout>
-            </SelectionProvider>
+            <DashboardLayout>
+                <LoadingPanel label="Loading team…" />
+            </DashboardLayout>
         );
     }
 
     const activeAdminCount = users.filter((u) => u.role === 'admin' && u.status === 'active').length;
 
     return (
-        <SelectionProvider>
         <DashboardLayout>
             <div className="max-w-5xl mx-auto animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 lg:mb-8">
@@ -506,6 +502,5 @@ export const Admin = () => {
                 </Panel>
             </div>
         </DashboardLayout>
-        </SelectionProvider>
     );
 };

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Minus, AlertTriangle } from 'lucide-react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { ErrorPanel, LoadingPanel, Panel } from '../components/AnalyticsPanels';
-import { SelectionProvider, useSelection } from '../contexts/SelectionContext';
+import { useSelection } from '../contexts/SelectionContext';
 import { fetchInsights, type Network } from '../services/metricoolApi';
 import { getPreviousPeriod } from '../lib/dateRange';
 import { percentDelta } from '../lib/series';
@@ -235,71 +235,134 @@ const RollupContent = () => {
                     No client has enough Facebook/Instagram posts in this window to rank yet.
                 </div>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="border-b border-primary-200">
-                            <tr className="text-left text-xs text-primary-600 uppercase tracking-wide">
-                                <th className="pb-3 font-semibold">Client</th>
-                                <th className="pb-3 font-semibold">Network</th>
-                                <th className="pb-3 font-semibold text-right">Typical engagement</th>
-                                <th className="pb-3 font-semibold text-right">vs last period</th>
-                                <th className="pb-3 font-semibold">Confidence</th>
-                                <th className="pb-3 font-semibold text-right">Posts</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row) => (
-                                <tr
-                                    key={`${row.blogId}-${row.network}`}
-                                    onClick={() => goToClient(row.blogId, row.network)}
-                                    className="border-b border-primary-100 hover:bg-primary-50/50 transition-colors cursor-pointer"
-                                >
-                                    <td className="py-3.5">
-                                        <div className="flex items-center gap-3">
-                                            {row.brandPicture ? (
-                                                <img
-                                                    src={row.brandPicture}
-                                                    alt=""
-                                                    referrerPolicy="no-referrer"
-                                                    className="w-8 h-8 rounded-full object-cover bg-primary-100 flex-shrink-0"
-                                                />
-                                            ) : (
-                                                <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-xs font-bold text-primary-500 flex-shrink-0">
-                                                    {row.brandName.slice(0, 2).toUpperCase()}
-                                                </div>
-                                            )}
-                                            <span className="text-sm font-medium text-primary-900">
-                                                {row.brandName}
-                                            </span>
-                                            {row.trendPct !== null && row.trendPct <= NEEDS_ATTENTION_THRESHOLD && (
-                                                <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-accent-red/15 text-accent-red">
-                                                    Needs attention
-                                                </span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="py-3.5 text-sm text-primary-700">
-                                        {NETWORK_LABEL[row.network]}
-                                    </td>
-                                    <td className="py-3.5 text-sm text-right font-semibold text-primary-900">
-                                        {row.currentMedian.toFixed(1)}%
-                                    </td>
-                                    <td className="py-3.5 text-right">
-                                        <TrendCell pct={row.trendPct} />
-                                    </td>
-                                    <td className="py-3.5">
-                                        <span className="text-xs font-medium text-primary-500">
-                                            {CONFIDENCE_LABEL[row.confidence] ?? row.confidence}
-                                        </span>
-                                    </td>
-                                    <td className="py-3.5 text-sm text-right text-primary-700">
-                                        {row.totalPosts}
-                                    </td>
+                <>
+                    {/* Desktop table. Every header/cell carries its own horizontal padding —
+                        relying on content width alone (as an auto-layout table does by
+                        default) let narrow columns like "vs last period" and "Confidence"
+                        render with zero gap between them. */}
+                    <div className="hidden lg:block overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="border-b border-primary-200">
+                                <tr className="text-left text-xs text-primary-600 uppercase tracking-wide">
+                                    <th className="pb-3 pr-4 font-semibold">Client</th>
+                                    <th className="pb-3 px-4 font-semibold">Network</th>
+                                    <th className="pb-3 px-4 font-semibold text-right">Typical engagement</th>
+                                    <th className="pb-3 px-4 font-semibold text-right">vs last period</th>
+                                    <th className="pb-3 px-4 font-semibold">Confidence</th>
+                                    <th className="pb-3 pl-4 font-semibold text-right">Posts</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody>
+                                {rows.map((row) => (
+                                    <tr
+                                        key={`${row.blogId}-${row.network}`}
+                                        onClick={() => goToClient(row.blogId, row.network)}
+                                        className="border-b border-primary-100 hover:bg-primary-50/50 transition-colors cursor-pointer"
+                                    >
+                                        <td className="py-3.5 pr-4">
+                                            <div className="flex items-center gap-3">
+                                                {row.brandPicture ? (
+                                                    <img
+                                                        src={row.brandPicture}
+                                                        alt=""
+                                                        referrerPolicy="no-referrer"
+                                                        className="w-8 h-8 rounded-full object-cover bg-primary-100 flex-shrink-0"
+                                                    />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-xs font-bold text-primary-500 flex-shrink-0">
+                                                        {row.brandName.slice(0, 2).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <span className="text-sm font-medium text-primary-900 truncate">
+                                                    {row.brandName}
+                                                </span>
+                                                {row.trendPct !== null && row.trendPct <= NEEDS_ATTENTION_THRESHOLD && (
+                                                    <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-accent-red/15 text-accent-red whitespace-nowrap">
+                                                        Needs attention
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="py-3.5 px-4 text-sm text-primary-700 whitespace-nowrap">
+                                            {NETWORK_LABEL[row.network]}
+                                        </td>
+                                        <td className="py-3.5 px-4 text-sm text-right font-semibold text-primary-900 whitespace-nowrap">
+                                            {row.currentMedian.toFixed(1)}%
+                                        </td>
+                                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                            <TrendCell pct={row.trendPct} />
+                                        </td>
+                                        <td className="py-3.5 px-4 whitespace-nowrap">
+                                            <span className="text-xs font-medium text-primary-500">
+                                                {CONFIDENCE_LABEL[row.confidence] ?? row.confidence}
+                                            </span>
+                                        </td>
+                                        <td className="py-3.5 pl-4 text-sm text-right text-primary-700">
+                                            {row.totalPosts}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Mobile cards — same data as the table, stacked instead of columned. */}
+                    <div className="lg:hidden space-y-3">
+                        {rows.map((row) => (
+                            <div
+                                key={`${row.blogId}-${row.network}`}
+                                onClick={() => goToClient(row.blogId, row.network)}
+                                className="rounded-xl border border-primary-100 bg-primary-50/40 p-4 cursor-pointer hover:border-primary-200 transition-colors"
+                            >
+                                <div className="flex items-center gap-3 mb-3">
+                                    {row.brandPicture ? (
+                                        <img
+                                            src={row.brandPicture}
+                                            alt=""
+                                            referrerPolicy="no-referrer"
+                                            className="w-9 h-9 rounded-full object-cover bg-primary-100 flex-shrink-0"
+                                        />
+                                    ) : (
+                                        <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-xs font-bold text-primary-500 flex-shrink-0">
+                                            {row.brandName.slice(0, 2).toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium text-primary-900 truncate">
+                                            {row.brandName}
+                                        </div>
+                                        <div className="text-xs text-primary-500">
+                                            {NETWORK_LABEL[row.network]} · {CONFIDENCE_LABEL[row.confidence] ?? row.confidence}
+                                        </div>
+                                    </div>
+                                    {row.trendPct !== null && row.trendPct <= NEEDS_ATTENTION_THRESHOLD && (
+                                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-accent-red/15 text-accent-red whitespace-nowrap flex-shrink-0">
+                                            Needs attention
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-primary-100">
+                                    <div className="text-center">
+                                        <div className="text-sm font-bold text-primary-900">
+                                            {row.currentMedian.toFixed(1)}%
+                                        </div>
+                                        <div className="text-xs text-primary-600">Engagement</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-sm font-bold">
+                                            <TrendCell pct={row.trendPct} />
+                                        </div>
+                                        <div className="text-xs text-primary-600">vs last period</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-sm font-bold text-primary-900">{row.totalPosts}</div>
+                                        <div className="text-xs text-primary-600">Posts</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
             )}
 
                 <div className="flex items-start gap-2 mt-6 pt-4 border-t border-primary-100">
@@ -315,19 +378,17 @@ const RollupContent = () => {
 };
 
 export const Rollup = () => (
-    <SelectionProvider>
-        <DashboardLayout>
-            <div className="max-w-6xl mx-auto animate-fade-in">
-                <div className="mb-6 lg:mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 tracking-tight">
-                        Client Rollup
-                    </h1>
-                    <p className="text-sm text-primary-600 mt-1">
-                        Every client's engagement trend, in one place.
-                    </p>
-                </div>
-                <RollupContent />
+    <DashboardLayout>
+        <div className="max-w-6xl mx-auto animate-fade-in">
+            <div className="mb-6 lg:mb-8">
+                <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 tracking-tight">
+                    Client Rollup
+                </h1>
+                <p className="text-sm text-primary-600 mt-1">
+                    Every client's engagement trend, in one place.
+                </p>
             </div>
-        </DashboardLayout>
-    </SelectionProvider>
+            <RollupContent />
+        </div>
+    </DashboardLayout>
 );

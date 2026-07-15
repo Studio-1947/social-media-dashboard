@@ -8,9 +8,14 @@ interface DashboardLayoutProps {
 
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    // Lifted from Sidebar so main's margin-left can track the sidebar's actual
+    // width — the sidebar is now `fixed` at every breakpoint (not just mobile),
+    // taken fully out of document flow, so nothing else naturally reserves
+    // space for it the way a flex sibling would have.
+    const [isCollapsed, setIsCollapsed] = useState(false);
 
     return (
-        <div className="flex min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
+        <div className="min-h-dvh bg-gradient-to-br from-primary-50 via-white to-primary-50">
             {/* Mobile Menu Button */}
             <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -27,20 +32,34 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                 />
             )}
 
-            {/* Sidebar - Responsive */}
+            {/* Sidebar — fixed to the viewport on every breakpoint. On mobile this
+                slides in as a drawer (translate-x); on desktop it's always
+                visible, pinned in place regardless of how tall or short the
+                main content is or how far the page scrolls. */}
             <div className={`
-                fixed lg:sticky lg:top-0 lg:h-screen left-0 z-40
+                fixed top-0 left-0 h-dvh z-40
                 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             `}>
                 {/* Closes the mobile drawer once a client/network is picked — on
                     desktop this is a no-op since the drawer is never "open". */}
-                <Sidebar onNavigate={() => setIsMobileMenuOpen(false)} />
+                <Sidebar
+                    isCollapsed={isCollapsed}
+                    onToggleCollapse={() => setIsCollapsed((v) => !v)}
+                    onNavigate={() => setIsMobileMenuOpen(false)}
+                />
             </div>
 
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-x-hidden w-full">
-                <div className="p-4 sm:p-6 lg:p-10 min-h-screen pt-20 lg:pt-6">
+            {/* Main Content Area — margin-left reserves exactly the fixed
+                sidebar's current width on desktop (w-20 collapsed / w-72
+                expanded, matching Sidebar.tsx). On mobile the sidebar is an
+                overlay drawer, not a permanent column, so no margin is needed. */}
+            <main
+                className={`overflow-x-hidden transition-[margin] duration-300 ease-in-out ${
+                    isCollapsed ? 'lg:ml-20' : 'lg:ml-72'
+                }`}
+            >
+                <div className="p-4 sm:p-6 lg:p-10 min-h-dvh pt-20 lg:pt-6">
                     {children}
                 </div>
             </main>

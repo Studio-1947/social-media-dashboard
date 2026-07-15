@@ -45,7 +45,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
+  /* dvh accounts for mobile browser chrome that toggles visibility on scroll;
+     100vh measures the viewport as if that chrome were never there, which is
+     what causes content to extend past the real visible fold on mobile. The
+     vh line stays as a fallback for browsers without dvh support. */
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--color-text);
   letter-spacing: -0.011em;
 }

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { LogOut, ChevronLeft, ChevronRight, AlertTriangle, ShieldCheck, LayoutGrid } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,8 +22,17 @@ function initialsFromEmail(email: string): string {
  * Sub-tabs (Overview/Audience/Posts/Insights/Competitors) stay in the content
  * area — those are "what to look at", scoped to one network, not "where am I".
  */
-export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
+export const Sidebar = ({
+    onNavigate,
+    isCollapsed,
+    onToggleCollapse,
+}: {
+    onNavigate?: () => void;
+    /** Owned by DashboardLayout, not locally — main's margin-left has to track
+     *  this same value now that the sidebar is `fixed` rather than a flex sibling. */
+    isCollapsed: boolean;
+    onToggleCollapse: () => void;
+}) => {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const {
@@ -44,13 +52,20 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
         navigate('/');
     };
 
+    // Picking a client or platform is fundamentally "go look at this" — it has
+    // to navigate to /dashboard, not just update the shared selection, or
+    // picking one from Admin/Rollup silently changes state you can't see
+    // anywhere. Navigating to the route you're already on is a no-op in React
+    // Router, so this is safe to call unconditionally from every page.
     const pickBrand = (blogId: number) => {
         selectBrand(blogId);
+        navigate('/dashboard');
         onNavigate?.();
     };
 
     const pickNetwork = (network: Parameters<typeof selectNetwork>[0]) => {
         selectNetwork(network);
+        navigate('/dashboard');
         onNavigate?.();
     };
 
@@ -73,12 +88,14 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                 // circle. Sections that DO need to clip their own fade/slide
                 // transition (logo block, footer block) scope overflow-hidden on
                 // themselves instead.
-                'bg-gradient-to-b from-primary-950 to-primary-900 text-white flex flex-col flex-shrink-0 h-screen sticky top-0 shadow-modern-xl transition-[width] duration-300 ease-in-out relative',
+                // No sticky/h-dvh here — DashboardLayout's wrapper div is already
+                // `fixed` with `h-dvh`, so this just fills that box.
+                'bg-gradient-to-b from-primary-950 to-primary-900 text-white flex flex-col flex-shrink-0 h-full shadow-modern-xl transition-[width] duration-300 ease-in-out relative',
                 isCollapsed ? 'w-20' : 'w-72'
             )}
         >
             <button
-                onClick={() => setIsCollapsed(!isCollapsed)}
+                onClick={onToggleCollapse}
                 className="hidden lg:flex absolute -right-3.5 top-8 w-7 h-7 bg-white text-primary-900 border border-primary-100 rounded-full items-center justify-center shadow-modern-lg hover:scale-110 hover:shadow-modern-xl transition-all z-50"
             >
                 {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}

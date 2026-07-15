@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     render() {
         if (this.state.error) {
             return (
-                <div className="min-h-screen flex items-center justify-center bg-primary-50 p-6">
+                <div className="min-h-dvh flex items-center justify-center bg-primary-50 p-6">
                     <div className="max-w-lg w-full bg-white rounded-2xl shadow-modern-lg border border-primary-100 p-8 text-center">
                         <div className="text-lg font-bold text-primary-900 mb-2">
                             Something went wrong
