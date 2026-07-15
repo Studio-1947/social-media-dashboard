@@ -33,7 +33,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                 transform transition-transform duration-300 ease-in-out
                 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             `}>
-                <Sidebar />
+                {/* Closes the mobile drawer once a client/network is picked — on
+                    desktop this is a no-op since the drawer is never "open". */}
+                <Sidebar onNavigate={() => setIsMobileMenuOpen(false)} />
             </div>
 
             {/* Main Content Area */}

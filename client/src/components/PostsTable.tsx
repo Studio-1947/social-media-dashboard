@@ -1,6 +1,22 @@
-import { useState } from 'react';
-import { Download, Search, Image as ImageIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, Search, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Post } from '../types/post';
+import { cn } from '../lib/utils';
+
+const PAGE_SIZE = 10;
+
+/** Page numbers with ellipses: 1 … 4 5 [6] 7 8 … 20. Keeps the bar short at 100+ pages. */
+function pageWindow(current: number, total: number): (number | '…')[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const out: (number | '…')[] = [1];
+    const lo = Math.max(2, current - 1);
+    const hi = Math.min(total - 1, current + 1);
+    if (lo > 2) out.push('…');
+    for (let p = lo; p <= hi; p++) out.push(p);
+    if (hi < total - 1) out.push('…');
+    out.push(total);
+    return out;
+}
 
 interface PostsTableProps {
     posts: Post[];
@@ -82,6 +98,16 @@ export const PostsTable = ({ posts, network }: PostsTableProps) => {
     const filteredPosts = posts.filter(
         (p) => p.text.toLowerCase().includes(q) || p.type.toLowerCase().includes(q)
     );
+
+    const [page, setPage] = useState(1);
+    // Back to page 1 whenever the result set changes underneath us (new search,
+    // new client, new date range) so we're never stranded on an empty page.
+    useEffect(() => setPage(1), [posts, searchTerm]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredPosts.length / PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages); // clamp if the list shrank
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pagedPosts = filteredPosts.slice(start, start + PAGE_SIZE);
 
     const downloadCSV = () => {
         if (posts.length === 0) return;
@@ -176,7 +202,7 @@ export const PostsTable = ({ posts, network }: PostsTableProps) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredPosts.map((post, i) => {
+                        {pagedPosts.map((post, i) => {
                             const { date, time } = formatDate(post.publishedAt);
                             const firstLine = post.text.split('\n')[0];
 
@@ -246,7 +272,7 @@ export const PostsTable = ({ posts, network }: PostsTableProps) => {
 
             {/* Mobile cards */}
             <div className="lg:hidden space-y-4">
-                {filteredPosts.map((post, i) => {
+                {pagedPosts.map((post, i) => {
                     const { date } = formatDate(post.publishedAt);
                     return (
                         <div
@@ -300,6 +326,60 @@ export const PostsTable = ({ posts, network }: PostsTableProps) => {
                         {posts.length === 0
                             ? 'No posts published in this period.'
                             : 'No posts match your search.'}
+                    </div>
+                </div>
+            )}
+
+            {/* Pagination — only when there's more than one page to show. */}
+            {filteredPosts.length > PAGE_SIZE && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-5 border-t border-primary-100">
+                    <div className="text-sm text-primary-500">
+                        Showing <span className="font-semibold text-primary-800">{start + 1}</span>–
+                        <span className="font-semibold text-primary-800">
+                            {Math.min(start + PAGE_SIZE, filteredPosts.length)}
+                        </span>{' '}
+                        of <span className="font-semibold text-primary-800">{filteredPosts.length}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setPage(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="flex items-center justify-center w-9 h-9 rounded-lg border border-primary-200 text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            aria-label="Previous page"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+
+                        {pageWindow(currentPage, totalPages).map((p, i) =>
+                            p === '…' ? (
+                                <span key={`gap-${i}`} className="w-9 h-9 flex items-center justify-center text-primary-400">
+                                    …
+                                </span>
+                            ) : (
+                                <button
+                                    key={p}
+                                    onClick={() => setPage(p)}
+                                    className={cn(
+                                        'w-9 h-9 rounded-lg text-sm font-semibold transition-colors',
+                                        p === currentPage
+                                            ? 'bg-primary-900 text-white'
+                                            : 'text-primary-600 hover:bg-primary-50 border border-primary-200'
+                                    )}
+                                >
+                                    {p}
+                                </button>
+                            )
+                        )}
+
+                        <button
+                            onClick={() => setPage(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="flex items-center justify-center w-9 h-9 rounded-lg border border-primary-200 text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            aria-label="Next page"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
                     </div>
                 </div>
             )}

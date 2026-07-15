@@ -302,35 +302,46 @@ export async function computeInsights({
 
   const rationale: string[] = [];
 
+  // Only a group that is genuinely above the account average earns a mention, so
+  // the "how we worked this out" text can never contradict the UI, which hides
+  // sub-average picks. (Matches MEANINGFUL_LIFT in the frontend.)
+  const isWin = (b: Bucket | null): b is Bucket => !!b && b.liftPct >= 3;
+
   if (confidence === 'insufficient') {
     rationale.push(
       `Only ${posts.length} post${posts.length === 1 ? '' : 's'} with data in this window — ` +
-        `too few to recommend anything without guessing. Widen the lookback, or wait until ` +
+        `too few to recommend anything without guessing. Widen the date range, or wait until ` +
         `this client has published more.`
     );
   } else {
-    // Every claim is tied to its sample size, so the reader can judge it.
-    if (format) {
+    // Every claim is tied to its post count, so the reader can judge it.
+    if (isWin(format)) {
       rationale.push(
-        `${format.label} posts have a median engagement of ${format.medianEngagement}% ` +
-          `(${format.liftPct >= 0 ? '+' : ''}${format.liftPct}% vs this account's typical post), across ${format.n} posts.`
+        `${format.label} posts typically get ${format.medianEngagement}% engagement — ` +
+          `${format.liftPct}% more than this account's usual post — across ${format.n} posts.`
       );
     }
-    if (weekday) {
+    if (isWin(weekday)) {
       rationale.push(
-        `${weekday.label} is the strongest day: ${weekday.medianEngagement}% median ` +
-          `(${weekday.liftPct >= 0 ? '+' : ''}${weekday.liftPct}%), across ${weekday.n} posts.`
+        `Posts on a ${weekday.label} did best: ${weekday.medianEngagement}% typically ` +
+          `(${weekday.liftPct}% above usual), across ${weekday.n} posts.`
       );
     }
-    if (hourBand) {
+    if (isWin(hourBand)) {
       rationale.push(
-        `Posting ${hourBand.label} performs best: ${hourBand.medianEngagement}% median ` +
-          `(${hourBand.liftPct >= 0 ? '+' : ''}${hourBand.liftPct}%), across ${hourBand.n} posts. Times are ${tz}.`
+        `Posting in the ${hourBand.label} window did best: ${hourBand.medianEngagement}% typically ` +
+          `(${hourBand.liftPct}% above usual), across ${hourBand.n} posts. Times are ${tz}.`
       );
     }
-    if (captionLength) {
+    if (isWin(captionLength)) {
       rationale.push(
-        `${captionLength.label} captions do best: ${captionLength.medianEngagement}% median, across ${captionLength.n} posts.`
+        `${captionLength.label} captions did best: ${captionLength.medianEngagement}% typically, across ${captionLength.n} posts.`
+      );
+    }
+    if (!isWin(format) && !isWin(weekday) && !isWin(hourBand) && !isWin(captionLength)) {
+      rationale.push(
+        `No format, day or time clearly stood out above this account's average in this window — ` +
+          `the differences are within normal noise.`
       );
     }
     if (confidence === 'low') {

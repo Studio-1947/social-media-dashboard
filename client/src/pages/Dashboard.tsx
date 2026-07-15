@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { DashboardLayout } from '../layouts/DashboardLayout';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { SocialDashboard } from '../components/SocialDashboard';
+import { SelectionProvider } from '../contexts/SelectionContext';
 
 /** Metricool wants `2025-11-17T00:00:00` — no timezone suffix. */
 function formatApiDate(date: Date): string {
@@ -36,21 +37,24 @@ export const Dashboard = () => {
     };
 
     return (
-        <DashboardLayout>
-            <div className="max-w-7xl mx-auto animate-fade-in">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 lg:mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 tracking-tight">
-                        Social Media Analytics
-                    </h1>
-                    <DateRangePicker
-                        onRangeChange={(from, to) => setDateRange({ from, to })}
-                        currentRangeLabel={rangeLabel()}
-                    />
-                </div>
+        // Wraps both the Sidebar (client + platform switcher) and the content
+        // below so they share one selection instead of each owning their own.
+        <SelectionProvider>
+            <DashboardLayout>
+                <div className="max-w-7xl mx-auto animate-fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 lg:mb-8">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-primary-900 tracking-tight">
+                            Social Media Analytics
+                        </h1>
+                        <DateRangePicker
+                            onRangeChange={(from, to) => setDateRange({ from, to })}
+                            currentRangeLabel={rangeLabel()}
+                        />
+                    </div>
 
-                {/* The client switcher, network tabs and every view hang off this. */}
-                <SocialDashboard range={dateRange} />
-            </div>
-        </DashboardLayout>
+                    <SocialDashboard range={dateRange} />
+                </div>
+            </DashboardLayout>
+        </SelectionProvider>
     );
 };
