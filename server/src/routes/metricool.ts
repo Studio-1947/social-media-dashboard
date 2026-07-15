@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import { MetricoolError, metricoolGet } from '../config/metricool';
 import {
@@ -16,6 +16,7 @@ import {
   fetchTimeline,
 } from '../services/metricoolService';
 import { computeInsights } from '../services/insightsService';
+import { asyncRoute } from '../lib/expressHelpers';
 
 export const metricoolRouter = Router();
 
@@ -43,14 +44,6 @@ const analyticsSchema = rangeSchema.extend({
   // subject — never infer it from the metric name.
   subject: z.enum(SUBJECTS).optional(),
 });
-
-function asyncRoute(
-  handler: (req: Request, res: Response) => Promise<unknown>
-) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    handler(req, res).catch(next);
-  };
-}
 
 /* ------------------------------------------------------------------ */
 /* Clients                                                             */
@@ -236,33 +229,4 @@ if (process.env.NODE_ENV !== 'production') {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Errors                                                              */
-/* ------------------------------------------------------------------ */
-
-metricoolRouter.use(
-  (error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        error: 'Invalid request',
-        details: error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-    }
-
-    if (error instanceof MetricoolError) {
-      // Deliberately NOT collapsed into an empty-data 200. A failing upstream
-      // must stay visible — silently returning [] is what let a stale token go
-      // unnoticed for two weeks.
-      return res.status(error.status >= 400 && error.status < 600 ? error.status : 502).json({
-        error: 'Metricool API error',
-        message: error.message,
-      });
-    }
-
-    console.error('[SocialFlow] Unhandled error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-);
+// Error handling is mounted once, app-wide, in index.ts — see lib/expressHelpers.ts.

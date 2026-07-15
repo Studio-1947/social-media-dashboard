@@ -11,20 +11,18 @@ export const Login = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const handleSubmit = (e: FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
 
-        setTimeout(() => {
-            const success = login(email, password);
-            if (success) {
-                navigate('/dashboard');
-            } else {
-                setError('Invalid credentials. Please try again.');
-                setIsLoading(false);
-            }
-        }, 800);
+        const result = await login(email, password);
+        if (result.ok) {
+            navigate('/dashboard');
+        } else {
+            setError(result.message);
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -114,7 +112,7 @@ export const Login = () => {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="studio@1947.io"
+                                    placeholder="you@company.com"
                                     required
                                     className="w-full bg-white border-2 border-primary-200 rounded-xl pl-12 pr-4 py-3.5 text-primary-900 placeholder:text-primary-400 focus:outline-none focus:border-accent-blue focus:ring-4 focus:ring-accent-blue/10 transition-all duration-300"
                                 />
@@ -166,14 +164,9 @@ export const Login = () => {
                         </button>
                     </form>
 
-                    {/* Demo Credentials Hint */}
-                    <div className="mt-8 p-4 bg-primary-100 rounded-xl border-2 border-primary-200">
-                        <p className="text-xs text-primary-700 text-center leading-relaxed">
-                            <span className="font-bold text-primary-900">Demo Credentials</span>
-                            <br />
-                            <span className="font-mono">studio@1947.io</span> • <span className="font-mono">Mirik@123</span>
-                        </p>
-                    </div>
+                    <p className="mt-8 text-xs text-primary-500 text-center leading-relaxed">
+                        Don't have an account? Ask a Social Flow admin to add you.
+                    </p>
                 </div>
             </div>
         </div>

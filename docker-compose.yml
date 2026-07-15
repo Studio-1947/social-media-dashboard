@@ -1,16 +1,56 @@
 name: social-flow
 
-# Local development stack. Both services hot-reload from your working tree.
+# Local development stack. Server and client hot-reload from your working tree;
+# Postgres data persists in a named volume across restarts.
 #
 #   docker compose up --build
-#     client  → http://localhost:5173
-#     server  → http://localhost:5000  (health: http://localhost:5000/health)
+#     client   → http://localhost:5173
+#     server   → http://localhost:5000  (health: http://localhost:5000/health)
+#     db       → postgres, internal only — nothing on the host needs to reach it
+#     adminer  → http://localhost:8081/?pgsql=db&username=socialflow&db=socialflow
+#                (DB browser — that query string pre-selects PostgreSQL and
+#                fills Server/Username/Database; Adminer's own default is
+#                MySQL, which "Connection refused"s against a Postgres port.
+#                Only Password is left for you to type. See DOCKER.md.)
 #
 # Requires server/.env — copy server/.env.example and fill in the real Metricool
-# credentials. Without it the app still boots, but every analytics request 503s
-# and the boot log says "[Metricool] NOT CONFIGURED".
+# credentials, plus JWT_SECRET / ADMIN_EMAIL / ADMIN_PASSWORD for the first login.
+# Without Metricool creds the app still boots, but every analytics request 503s.
+# Without an admin bootstrap the app boots but nobody can log in — see the boot
+# log for "[Auth] Bootstrapped admin ..." or "[Auth] NOT CONFIGURED".
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: socialflow
+      POSTGRES_USER: socialflow
+      # Dev-only default — overridden by server/.env in any real deployment.
+      # See docker-compose.prod.yml, which requires POSTGRES_PASSWORD explicitly.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-socialflow_dev_only}
+    volumes:
+      - socialflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U socialflow -d socialflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    # No published port: only the server container talks to Postgres. Nothing
+    # on the host needs to reach it directly for the app to work.
+
+  # A web GUI for browsing/editing Postgres directly — dev convenience only,
+  # never add this to docker-compose.prod.yml. No ORM in this project (raw `pg`
+  # with hand-written SQL — see server/src/config/db.ts), so there's no
+  # `prisma studio` equivalent; this is the lightest substitute.
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8081:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
   server:
     build:
       context: ./server
@@ -25,6 +65,8 @@ services:
       PORT: 5000
       # The browser hits the client on :5173, so that's the origin the API must allow.
       FRONTEND_URLS: http://localhost:5173
+      # `db` is the compose service name — only resolvable from inside the network.
+      DATABASE_URL: postgres://socialflow:${POSTGRES_PASSWORD:-socialflow_dev_only}@db:5432/socialflow
     ports:
       - "5000:5000"
     volumes:
@@ -33,6 +75,9 @@ services:
       # different platform, or absent entirely).
       - ./server/src:/app/src:ro
       - ./server/tsconfig.json:/app/tsconfig.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       # Deliberately NOT /health: that returns 503 when Metricool is unconfigured,
       # which would mark a perfectly running container unhealthy on first run and
@@ -72,3 +117,7 @@ services:
     depends_on:
       server:
         condition: service_healthy
+
+volumes:
+  # Named so `docker compose down` (without -v) leaves user accounts intact.
+  socialflow_pgdata:

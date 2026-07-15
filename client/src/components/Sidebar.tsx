@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { LogOut, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { socialFlowBrand } from '../config/brand';
 import { NETWORK_ICON } from '../lib/networkIcons';
 import { cn } from '../lib/utils';
+
+/** "jane@company.com" -> "JA". Falls back to "?" for a malformed email. */
+function initialsFromEmail(email: string): string {
+    const local = email.split('@')[0] || '';
+    return (local.slice(0, 2) || '?').toUpperCase();
+}
 
 /**
  * The product shell AND the primary navigation: which client, then which
@@ -19,7 +25,7 @@ import { cn } from '../lib/utils';
  */
 export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
     const navigate = useNavigate();
     const {
         brands,
@@ -45,6 +51,11 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
 
     const pickNetwork = (network: Parameters<typeof selectNetwork>[0]) => {
         selectNetwork(network);
+        onNavigate?.();
+    };
+
+    const goToAdmin = () => {
+        navigate('/admin');
         onNavigate?.();
     };
 
@@ -231,9 +242,31 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                         </div>
                     </div>
                 )}
+
+                {/* Admin panel entry — only rendered for an admin. Hiding it for a
+                    member isn't the security boundary (every /api/admin route
+                    re-checks role server-side) — it just avoids showing a link that
+                    would 403 the moment they used it. */}
+                {user?.role === 'admin' && (
+                    <div className="flex-shrink-0 px-3 pb-2">
+                        <button
+                            onClick={goToAdmin}
+                            title="Admin panel"
+                            className={cn(
+                                'flex items-center gap-2.5 rounded-xl font-semibold text-primary-300 hover:text-white hover:bg-white/5 transition-all duration-200',
+                                isCollapsed ? 'w-11 h-11 justify-center mx-auto' : 'w-full px-3 py-2 text-sm'
+                            )}
+                        >
+                            <ShieldCheck size={16} className="flex-shrink-0" />
+                            {!isCollapsed && <span className="truncate">Team access</span>}
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {/* Agency identity + logout */}
+            {/* Signed-in user + logout. Shows the REAL account, not a static
+                placeholder — an earlier version hardcoded "Studio 1947 / Agency
+                account" here regardless of who was actually logged in. */}
             <div className="p-4 border-t border-white/10 overflow-hidden flex-shrink-0">
                 <div
                     className={cn(
@@ -244,13 +277,15 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                     )}
                 >
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20 flex-shrink-0">
-                        S47
+                        {user ? initialsFromEmail(user.email) : 'SF'}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold truncate">
-                            {socialFlowBrand.poweredBy}
+                        <div className="text-sm font-semibold truncate" title={user?.email}>
+                            {user?.email ?? socialFlowBrand.poweredBy}
                         </div>
-                        <div className="text-xs text-primary-400">Agency account</div>
+                        <div className="text-xs text-primary-400">
+                            {user?.role === 'admin' ? 'Admin' : 'Team member'}
+                        </div>
                     </div>
                     <button
                         onClick={handleLogout}
@@ -267,8 +302,11 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                         isCollapsed ? 'opacity-100 scale-100 relative' : 'opacity-0 scale-50 pointer-events-none absolute'
                     )}
                 >
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20">
-                        S47
+                    <div
+                        className="w-9 h-9 rounded-full bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center text-xs font-bold shadow-modern ring-2 ring-white/20"
+                        title={user?.email}
+                    >
+                        {user ? initialsFromEmail(user.email) : 'SF'}
                     </div>
                     <button
                         onClick={handleLogout}

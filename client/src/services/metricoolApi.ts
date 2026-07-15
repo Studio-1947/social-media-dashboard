@@ -1,5 +1,5 @@
-import axios from 'axios';
 import type { Insights } from '../types/insights';
+import { createApiClient } from '../lib/httpClient';
 
 /**
  * Typed fetchers for Social Flow's own API (which fronts Metricool).
@@ -13,7 +13,10 @@ import type { Insights } from '../types/insights';
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/metricool';
 
-const api = axios.create({ baseURL: API_BASE_URL, timeout: 30_000 });
+// Every /api/metricool route now requires a signed-in user — createApiClient
+// attaches the bearer token automatically. A bare axios.create() here would
+// silently 401 on every call.
+const api = createApiClient(API_BASE_URL);
 
 export type Network = 'facebook' | 'instagram' | 'youtube';
 
