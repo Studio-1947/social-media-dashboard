@@ -28,9 +28,11 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # Only ./src is mounted, so the image's node_modules aren't shadowed by the
-      # host's (which may be built for a different platform, or absent entirely).
+      # Individual paths rather than the whole directory, so the image's
+      # node_modules aren't shadowed by the host's (which may be built for a
+      # different platform, or absent entirely).
       - ./server/src:/app/src:ro
+      - ./server/tsconfig.json:/app/tsconfig.json:ro
     healthcheck:
       # Deliberately NOT /health: that returns 503 when Metricool is unconfigured,
       # which would mark a perfectly running container unhealthy on first run and
@@ -56,10 +58,17 @@ services:
     ports:
       - "5173:5173"
     volumes:
+      # Everything you'd realistically edit is mounted, so it takes effect without
+      # a rebuild. Only package.json (a dependency change) still needs
+      # `docker compose up -d --build` — npm ci runs at image build time.
       - ./client/src:/app/src:ro
       - ./client/index.html:/app/index.html:ro
       - ./client/vite.config.ts:/app/vite.config.ts:ro
       - ./client/tailwind.config.js:/app/tailwind.config.js:ro
+      - ./client/postcss.config.js:/app/postcss.config.js:ro
+      - ./client/tsconfig.json:/app/tsconfig.json:ro
+      - ./client/tsconfig.app.json:/app/tsconfig.app.json:ro
+      - ./client/tsconfig.node.json:/app/tsconfig.node.json:ro
     depends_on:
       server:
         condition: service_healthy

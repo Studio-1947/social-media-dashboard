@@ -452,3 +452,136 @@ found — not by reading docs, by testing live.
 - [ ] Rate-limit queue + response caching ported from `config/metricool.ts`
       — Metricool's API will 429 aggressively otherwise, especially with N
       clients' dashboards polling concurrently.
+
+## 10. Corrections to this document — found live while building Social Flow
+
+Verified against the live Metricool API on the Studio 1947 account (userId
+5010443, 4 brands), July 2026. Each of these contradicts something above and
+each caused a real bug. **These override the sections they correct.**
+
+### 10.1 The timelines payload is nested THREE levels deep
+
+§7 implies a series arrives either as a bare array or as `{values: [...]}`. The
+actual shape from `/api/v2/analytics/timelines` is:
+
+```json
+{ "data": [ { "metric": "followers", "values": [ {"dateTime": "...", "value": 89672} ] } ] }
+```
+
+`.data` is an **array of per-metric wrapper objects**, and the points live in
+each wrapper's `.values`. This is a nastier version of the same trap §7 warns
+about: a normalizer that says "if `.data` is an array, those are my points"
+returns the one-element array of *wrappers*, every point parses as `undefined`,
+the series looks empty, and the UI silently falls back to sample data **while
+real data is sitting right there**. Unwrap explicitly:
+
+```ts
+if (Array.isArray(candidate)) {
+  const wrappers = candidate.filter(x => Array.isArray(x?.values));
+  if (wrappers.length) return wrappers.flatMap(w => w.values);
+  return candidate;                       // already the points
+}
+if (Array.isArray(candidate?.values)) return candidate.values;
+if ('data' in candidate) return unwrap(candidate.data);   // recurse
+```
+
+Distribution is only two levels (`{ "data": [ {key, value} ] }`) with no wrapper,
+so the same function must handle both.
+
+### 10.2 Series ordering is inconsistent per network — you must sort
+
+On one account, for the same date range:
+
+| Network | Order returned |
+|---|---|
+| Instagram | strictly **descending** (newest first) |
+| Facebook | ascending |
+| YouTube | **no order at all** |
+
+Anything that reads "the current value" by taking the last element of the array
+(followers, subscribers — the stock metrics) will report the **oldest** value in
+the range for Instagram. Sort by timestamp before using a series, always.
+
+### 10.3 `competitors/{network}` requires a `limit` param — undocumented
+
+§4 says this endpoint returns `200 []` until competitors are configured. It does
+**not**. Without `limit` it returns, on every brand and every network:
+
+```json
+{"status":"BAD_REQUEST","code":"400","title":"ValidationError",
+ "detail":{"limit":"must not be blank; Invalid value 'null'. The parameter must be an number."}}
+```
+
+Add `limit` (50 is fine) and it behaves exactly as documented: `200 {"data":[]}`.
+
+This one is worse than it looks. The health tracker in §6 records every failed
+call — so these 400s, fired by a *presence check for an optional feature nobody
+uses*, pushed `/health` to `failing` and made it serve 503. A completely healthy
+integration would have paged on-call. If you port the health pattern (you
+should), make sure a probe for an optional feature can't poison it.
+
+### 10.4 Metrics genuinely empty on this account
+
+All return `200` with `"values": []` — real emptiness, not an error and not a
+wrong metric name:
+
+| Network | Metric | Where |
+|---|---|---|
+| Instagram | `profile_views`, `website_clicks` | **all 4 brands** |
+| Instagram | `delta_followers` | the 3 smaller brands |
+| Facebook | `page_posts_impressions` (reach) | the 3 smaller brands; the large one has data |
+
+§7's "always fall back to badged sample data" is the wrong default once real
+clients are in the product: it puts an invented Reach figure in front of a
+client, and a badge doesn't fully undo that. Social Flow shows an explicit
+"No data" for an empty metric and reserves the error state for actual failures.
+
+### 10.5 Post timestamps are in Metricool's server timezone, NOT the one you request
+
+The per-post `created`/`publishedAt` object looks authoritative:
+
+```json
+{ "dateTime": "2026-07-13T12:19:57", "timezone": "Europe/Madrid" }
+```
+
+That `timezone` is **Metricool's own server zone (Europe/Madrid)** and is returned
+regardless of the `timezone` query param you send. Cross-check against the epoch
+`timestamp` on the same Facebook post (`1783937997000` = 10:19:57 UTC): the post
+actually published at **15:49 IST**, not the 12:19 the string implies. Treating
+`dateTime` as local wall-clock (i.e. `new Date("2026-07-13T12:19:57")`) is off by
+3.5h for an IST audience — enough to put every "best hour to post" figure in the
+wrong part of the day. Prefer the epoch `timestamp` when present; otherwise
+convert the wall-clock string *from its declared zone* to a real UTC instant, then
+derive local day/hour yourself.
+
+### 10.6 Facebook post `engagement` is 0 for ~85% of posts — because reach is missing
+
+Metricool computes a post's `engagement` as interactions ÷ **reach**. But Meta
+withholds unique-impressions (reach) for most Facebook posts — they come back as
+`reach: 0` (or `impressionsUnique: 0`) alongside thousands of `impressions` and
+real likes/comments/shares. Divide by that zero reach and `engagement` is `0`.
+
+Measured on one account: **85% of Facebook posts had `engagement: 0`** this way. A
+median or average over that is ~0%, which silently makes every Facebook
+post-performance insight meaningless — the tab looks populated but every number is
+zero.
+
+Two fixes, both needed:
+1. Treat `reach: 0` against non-zero impressions as **"not reported" (null)**, not
+   "zero people". Don't render it as a real 0.
+2. Compute your own engagement rate as **interactions ÷ impressions**, since
+   impressions are present on every post. It reads lower than Metricool's
+   reach-based number, so label which one you're showing. This is the only
+   denominator that yields a comparable figure across a whole Facebook account.
+
+### 10.7 Post-performance "insights" should be statistics, not a model
+
+Post volume per client is wildly uneven — one brand here has 1,300+ posts/year,
+another has ~30 total. A trained ML model overfits at the low end and wouldn't beat
+median-per-bucket at the high end; it would just be harder to audit. What actually
+holds up: median engagement per bucket (format / weekday / hour-band / caption
+length / hashtag), each carrying its sample size `n`, with two thresholds — one to
+*display* a bucket, a higher one to *recommend* from it — and shrinkage toward the
+account baseline so a lucky 5-post bucket can't top the ranking. A client with too
+few posts gets an explicit "not enough data", never a confident guess. Call it what
+it is (patterns from history), not a prediction.

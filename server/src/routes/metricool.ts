@@ -15,6 +15,7 @@ import {
   fetchPosts,
   fetchTimeline,
 } from '../services/metricoolService';
+import { computeInsights } from '../services/insightsService';
 
 export const metricoolRouter = Router();
 
@@ -149,6 +150,33 @@ metricoolRouter.get(
     const network = networkSchema.parse(req.params.network);
     const params = rangeSchema.parse(req.query);
     const result = await fetchCompetitors({ network, ...params });
+    res.json(result);
+  })
+);
+
+/* ------------------------------------------------------------------ */
+/* Insights — what's working, and what to post next                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Statistical, not ML. Every bucket carries its sample size and thin buckets are
+ * excluded from advice; a client with too few posts gets confidence
+ * 'insufficient' rather than a fabricated recommendation. See insightsService.
+ */
+metricoolRouter.get(
+  '/insights/:network',
+  asyncRoute(async (req, res) => {
+    const network = networkSchema.parse(req.params.network);
+
+    if (!NETWORK_CAPABILITIES[network].posts) {
+      return res.status(400).json({
+        error: 'Unsupported',
+        message: `Metricool exposes no per-post data for ${network}, so there is nothing to analyse.`,
+      });
+    }
+
+    const params = rangeSchema.parse(req.query);
+    const result = await computeInsights({ network, ...params });
     res.json(result);
   })
 );

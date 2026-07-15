@@ -11,7 +11,7 @@ import {
 import { SubTabs, type SubTab } from './SubTabs';
 import { PostsTable } from './PostsTable';
 import { CompetitorsPanel } from './CompetitorsPanel';
-import { SampleDataBadge } from './SampleDataBadge';
+import { InsightsView } from './InsightsView';
 import { useDistributions, useHasCompetitors, usePosts, useTimelines } from '../hooks/useMetricool';
 import { latestValue, sumSeries } from '../lib/series';
 import { countryName } from '../lib/countryNames';
@@ -48,20 +48,28 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
         return <ErrorPanel message={timelines.error} onRetry={timelines.reload} />;
     }
 
-    const { series, isSample } = timelines;
+    const { series, isEmpty } = timelines;
 
-    const followers = latestValue(series.followers);
+    // null (not 0) when Metricool reported nothing — 0 is a real result.
+    const total = (key: string) => (isEmpty[key] ? null : sumSeries(series[key]));
+    const latest = (key: string) => (isEmpty[key] ? null : latestValue(series[key]));
+
     // delta_followers is one signed series covering both directions — Metricool
-    // has no separate gained/lost metric for Instagram.
-    const delta = sumSeries(series.deltaFollowers);
+    // has no separate gained/lost metric for Instagram. Empty on smaller accounts.
+    const delta = total('deltaFollowers');
 
-    const postsPublished = sumSeries(series.postsCount);
-    const interactions = sumSeries(series.interactions);
+    const postsPublished = total('postsCount');
+    const interactions = total('interactions');
+    const perPost =
+        interactions !== null && postsPublished !== null && postsPublished > 0
+            ? Math.round(interactions / postsPublished)
+            : null;
 
     const tabs: SubTab[] = [
         { key: 'overview', label: 'Overview' },
         { key: 'audience', label: 'Audience' },
         { key: 'posts', label: 'Posts' },
+        { key: 'insights', label: 'Insights' },
         ...(hasCompetitors ? [{ key: 'competitors', label: 'Competitors' }] : []),
     ];
 
@@ -71,32 +79,36 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
 
             {tab === 'overview' && (
                 <>
-                    <Panel
-                        title="Community Growth"
-                        isSample={isSample.followers}
-                        subtitle="Followers over the selected period"
-                    >
+                    <Panel title="Community Growth" subtitle="Followers over the selected period">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                            <StatCard label="Followers" value={followers} emphasis />
+                            <StatCard label="Followers" value={latest('followers')} emphasis />
                             <StatCard
                                 label="Net change"
-                                value={delta > 0 ? `+${delta.toLocaleString()}` : delta.toLocaleString()}
+                                value={
+                                    delta === null
+                                        ? null
+                                        : delta > 0
+                                          ? `+${delta.toLocaleString()}`
+                                          : delta.toLocaleString()
+                                }
                             />
-                            <StatCard label="Profile views" value={sumSeries(series.profileViews)} />
+                            {/* profile_views is empty across every client on this account. */}
+                            <StatCard label="Profile views" value={total('profileViews')} />
                         </div>
                         <TimelineChart series={series.followers ?? []} color={ACCENT} name="Followers" />
                     </Panel>
 
-                    <Panel title="Reach & Impressions" isSample={isSample.reach}>
+                    <Panel title="Reach & Impressions">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <StatCard label="Reach" value={sumSeries(series.reach)} emphasis />
-                            <StatCard label="Impressions" value={sumSeries(series.impressions)} />
+                            <StatCard label="Reach" value={total('reach')} emphasis />
+                            <StatCard label="Impressions" value={total('impressions')} />
                             <StatCard
                                 label="Accounts engaged"
-                                value={sumSeries(series.accountsEngaged)}
+                                value={total('accountsEngaged')}
                                 hint="Distinct accounts, not impressions"
                             />
-                            <StatCard label="Website clicks" value={sumSeries(series.clicks)} />
+                            {/* website_clicks is likewise empty on this account. */}
+                            <StatCard label="Website clicks" value={total('clicks')} />
                         </div>
                         <MultiLineChart
                             series={[
@@ -111,15 +123,12 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                         />
                     </Panel>
 
-                    <Panel title="Engagement" isSample={isSample.interactions}>
+                    <Panel title="Engagement">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                             <StatCard label="Interactions" value={interactions} emphasis />
                             {/* True period total from postsCount — never posts.length. */}
                             <StatCard label="Posts published" value={postsPublished} />
-                            <StatCard
-                                label="Interactions per post"
-                                value={postsPublished > 0 ? Math.round(interactions / postsPublished) : 0}
-                            />
+                            <StatCard label="Interactions per post" value={perPost} />
                         </div>
                         <TimelineChart
                             series={series.interactions ?? []}
@@ -137,7 +146,7 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                     ) : (
                         <>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <Panel title="Gender" isSample={distributions.isSample.gender}>
+                                <Panel title="Gender">
                                     <DistributionChart
                                         rows={distributions.rows.gender ?? []}
                                         asPercentage
@@ -147,23 +156,23 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                                     />
                                 </Panel>
 
-                                <Panel title="Age" isSample={distributions.isSample.age}>
+                                <Panel title="Age">
                                     <DistributionChart rows={distributions.rows.age ?? []} asPercentage />
                                 </Panel>
                             </div>
 
-                            <Panel title="Followers by country" isSample={distributions.isSample.country}>
+                            <Panel title="Followers by country">
                                 <DistributionChart
                                     rows={distributions.rows.country ?? []}
                                     formatLabel={countryName}
                                 />
                             </Panel>
 
-                            <Panel title="Followers by city" isSample={distributions.isSample.city}>
+                            <Panel title="Followers by city">
                                 <DistributionChart rows={distributions.rows.city ?? []} />
                             </Panel>
 
-                            <Panel title="Content types" isSample={distributions.isSample.postsTypes}>
+                            <Panel title="Content types">
                                 <DistributionChart rows={distributions.rows.postsTypes ?? []} />
                             </Panel>
                         </>
@@ -178,16 +187,13 @@ export const InstagramView = ({ range, blogId }: { range: DateRange; blogId: num
                     ) : posts.error ? (
                         <ErrorPanel message={posts.error} />
                     ) : (
-                        <div>
-                            {posts.isSample && (
-                                <div className="flex justify-end mb-3">
-                                    <SampleDataBadge />
-                                </div>
-                            )}
-                            <PostsTable posts={posts.posts} network="instagram" />
-                        </div>
+                        <PostsTable posts={posts.posts} network="instagram" />
                     )}
                 </>
+            )}
+
+            {tab === 'insights' && (
+                <InsightsView network="instagram" range={range} blogId={blogId} enabled={tab === 'insights'} />
             )}
 
             {tab === 'competitors' && (

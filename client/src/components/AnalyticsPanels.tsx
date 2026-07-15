@@ -14,16 +14,17 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
-import { SampleDataBadge } from './SampleDataBadge';
 import { formatChartDate, type DistributionRow, type SeriesPoint } from '../lib/series';
 import { cn } from '../lib/utils';
 
 /**
  * Shared presentation pieces for the network views.
  *
- * Every one of these takes an explicit `isSample` flag rather than inferring
- * "looks empty, must be mock" internally — the caller is the only place that
- * knows whether it fell back, and the badge must track that decision exactly.
+ * When Metricool returns nothing for a metric, these render an explicit "No
+ * data" — never a plausible-looking invented number. Several metrics are
+ * genuinely empty on real accounts (Instagram profile views and website clicks;
+ * Facebook reach on smaller pages), and those blanks are the truth about the
+ * client's data, not a rendering failure to paper over.
  */
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -47,28 +48,37 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export interface StatCardProps {
     label: string;
-    value: number | string;
+    /** `null` means Metricool returned nothing — renders "—", never a fake number. */
+    value: number | string | null;
     hint?: string;
     /** Renders dark/inverted. Use for the one headline number per group. */
     emphasis?: boolean;
 }
 
-export const StatCard = ({ label, value, hint, emphasis }: StatCardProps) => (
-    <div
-        className={cn(
-            'rounded-2xl p-5 shadow-modern hover-lift border',
-            emphasis
-                ? 'bg-gradient-to-br from-primary-900 to-primary-800 text-white border-transparent'
-                : 'bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200 text-primary-900'
-        )}
-    >
-        <div className="text-sm font-medium opacity-70 uppercase tracking-wide mb-2">{label}</div>
-        <div className="text-3xl font-bold tracking-tight">
-            {typeof value === 'number' ? value.toLocaleString() : value}
+export const StatCard = ({ label, value, hint, emphasis }: StatCardProps) => {
+    const isEmpty = value === null;
+
+    return (
+        <div
+            className={cn(
+                'rounded-2xl p-5 shadow-modern hover-lift border',
+                isEmpty
+                    ? 'bg-primary-50/60 border-dashed border-primary-200 text-primary-400'
+                    : emphasis
+                      ? 'bg-gradient-to-br from-primary-900 to-primary-800 text-white border-transparent'
+                      : 'bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200 text-primary-900'
+            )}
+        >
+            <div className="text-sm font-medium opacity-70 uppercase tracking-wide mb-2">{label}</div>
+            <div className="text-3xl font-bold tracking-tight">
+                {isEmpty ? '—' : typeof value === 'number' ? value.toLocaleString() : value}
+            </div>
+            <div className="text-xs opacity-60 mt-1.5">
+                {isEmpty ? 'Not reported by Metricool for this period' : hint}
+            </div>
         </div>
-        {hint && <div className="text-xs opacity-60 mt-1.5">{hint}</div>}
-    </div>
-);
+    );
+};
 
 /* ------------------------------------------------------------------ */
 /* Panel shell                                                         */
@@ -76,23 +86,31 @@ export const StatCard = ({ label, value, hint, emphasis }: StatCardProps) => (
 
 export interface PanelProps {
     title: string;
-    /** True when the contents are sample data. Drives the badge — never silent. */
-    isSample?: boolean;
     subtitle?: string;
     children: ReactNode;
     className?: string;
 }
 
-export const Panel = ({ title, subtitle, isSample, children, className }: PanelProps) => (
+export const Panel = ({ title, subtitle, children, className }: PanelProps) => (
     <div className={cn('modern-card p-6 lg:p-8 animate-slide-up', className)}>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <div>
                 <h3 className="text-xl font-bold text-primary-900">{title}</h3>
                 {subtitle && <p className="text-sm text-primary-600 mt-1">{subtitle}</p>}
             </div>
-            {isSample && <SampleDataBadge />}
         </div>
         {children}
+    </div>
+);
+
+/** Shown in place of a chart when Metricool returned no points for the range. */
+export const NoData = ({ label = 'No data for this period' }: { label?: string }) => (
+    <div className="h-72 bg-primary-50/30 rounded-xl border border-dashed border-primary-200 flex flex-col items-center justify-center text-center px-6">
+        <div className="text-sm font-semibold text-primary-500">{label}</div>
+        <div className="text-xs text-primary-400 mt-1.5 max-w-sm">
+            Metricool reports nothing for this metric on this client. That's the real
+            answer — not a loading or connection problem.
+        </div>
     </div>
 );
 
@@ -107,6 +125,8 @@ export interface TimelineChartProps {
 }
 
 export const TimelineChart = ({ series, color, name }: TimelineChartProps) => {
+    if (series.length === 0) return <NoData />;
+
     const data = series.map((p) => ({ name: formatChartDate(p.date), [name]: p.value }));
     const gradientId = `grad-${name.replace(/\W/g, '')}`;
 
@@ -145,9 +165,14 @@ export interface MultiSeries {
 
 /** Overlays several metrics on one time axis, joined by date. */
 export const MultiLineChart = ({ series }: { series: MultiSeries[] }) => {
+    // Only plot the metrics that actually have data; drop the empty ones from the
+    // legend rather than drawing a flat line at zero, which reads as a real result.
+    const present = series.filter((s) => s.series.length > 0);
+    if (present.length === 0) return <NoData />;
+
     const byDate = new Map<string, Record<string, number | string>>();
 
-    for (const s of series) {
+    for (const s of present) {
         for (const point of s.series) {
             const label = formatChartDate(point.date);
             const row = byDate.get(label) ?? { name: label };
@@ -165,7 +190,7 @@ export const MultiLineChart = ({ series }: { series: MultiSeries[] }) => {
                     <YAxis stroke="#64748b" style={{ fontSize: 12 }} tickLine={false} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    {series.map((s) => (
+                    {present.map((s) => (
                         <Line
                             key={s.name}
                             type="monotone"
@@ -206,6 +231,8 @@ export const DistributionChart = ({
     asPercentage = false,
     limit = 8,
 }: DistributionChartProps) => {
+    if (rows.length === 0) return <NoData />;
+
     const top = [...rows].sort((a, b) => b.value - a.value).slice(0, limit);
     const total = rows.reduce((sum, r) => sum + r.value, 0) || 1;
 

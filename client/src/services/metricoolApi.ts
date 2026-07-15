@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { Insights } from '../types/insights';
 
 /**
  * Typed fetchers for Social Flow's own API (which fronts Metricool).
@@ -160,6 +161,18 @@ export async function fetchCompetitors(
     blogId: number
 ): Promise<ListResponse> {
     return get<ListResponse>(`/competitors/${network}?${rangeParams(range, blogId)}`);
+}
+
+/**
+ * Post-performance insights — what's working and what to publish next. Only
+ * Facebook and Instagram; YouTube exposes no per-post data.
+ */
+export async function fetchInsights(
+    network: Network,
+    range: DateRange,
+    blogId: number
+): Promise<Insights> {
+    return get<Insights>(`/insights/${network}?${rangeParams(range, blogId)}`);
 }
 
 export default api;

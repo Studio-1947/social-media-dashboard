@@ -39,33 +39,29 @@ export const YouTubeView = ({ range, blogId }: { range: DateRange; blogId: numbe
         return <ErrorPanel message={timelines.error} onRetry={timelines.reload} />;
     }
 
-    const { series, isSample } = timelines;
+    const { series, isEmpty } = timelines;
 
-    const subscribers = latestValue(series.subscribers);
-    const gained = sumSeries(series.subscribersGained);
-    const lost = sumSeries(series.subscribersLost);
+    // null (not 0) when Metricool reported nothing — 0 is a real result.
+    const total = (key: string) => (isEmpty[key] ? null : sumSeries(series[key]));
+    const latest = (key: string) => (isEmpty[key] ? null : latestValue(series[key]));
+
+    const gained = total('subscribersGained');
+    const lost = total('subscribersLost');
+    const netChange = gained !== null && lost !== null ? gained - lost : null;
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <Panel
-                title="Channel Overview"
-                isSample={isSample.subscribers}
-                subtitle="Everything Metricool exposes for YouTube"
-            >
+            <Panel title="Channel Overview" subtitle="Everything Metricool exposes for YouTube">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <StatCard label="Subscribers" value={subscribers} emphasis />
-                    <StatCard label="Views" value={sumSeries(series.views)} hint="This period" />
-                    <StatCard
-                        label="Videos published"
-                        value={sumSeries(series.videos)}
-                        hint="This period"
-                    />
-                    <StatCard label="Net subscribers" value={gained - lost} />
+                    <StatCard label="Subscribers" value={latest('subscribers')} emphasis />
+                    <StatCard label="Views" value={total('views')} hint="This period" />
+                    <StatCard label="Videos published" value={total('videos')} hint="This period" />
+                    <StatCard label="Net subscribers" value={netChange} />
                 </div>
                 <TimelineChart series={series.subscribers ?? []} color={ACCENT} name="Subscribers" />
             </Panel>
 
-            <Panel title="Subscribers Gained vs Lost" isSample={isSample.subscribersGained}>
+            <Panel title="Subscribers Gained vs Lost">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                     <StatCard label="Gained" value={gained} />
                     <StatCard label="Lost" value={lost} />
@@ -78,7 +74,7 @@ export const YouTubeView = ({ range, blogId }: { range: DateRange; blogId: numbe
                 />
             </Panel>
 
-            <Panel title="Views" isSample={isSample.views}>
+            <Panel title="Views">
                 <TimelineChart series={series.views ?? []} color="#8b5cf6" name="Views" />
             </Panel>
 

@@ -17,22 +17,48 @@ export interface SeriesPoint {
     value: number;
 }
 
-/** The only safe way to get an array out of a Metricool series container. */
-export function asSeriesArray(candidate: unknown): unknown[] {
-    if (Array.isArray(candidate)) return candidate;
+/** `{ metric: "followers", values: [...] }` — Metricool's per-metric wrapper. */
+function isMetricWrapper(x: unknown): x is { values: unknown[] } {
+    return Boolean(x) && typeof x === 'object' && Array.isArray((x as any).values);
+}
+
+/**
+ * The only safe way to get an array of points out of a Metricool container.
+ *
+ * Verified against the live API, the timelines shape is a THREE-level nest:
+ *
+ *     { data: [ { metric: "followers", values: [ {dateTime, value}, … ] } ] }
+ *
+ * The trap: `.data` is an array, so a naive "if data is an array, that's the
+ * points" check returns the one-element array of *wrappers* instead of the
+ * points inside them. Every point then parses as undefined, the series looks
+ * empty, and the UI falls back to sample data while real data is right there.
+ * That is the same silent-empty failure the reference doc warns about, one level
+ * deeper — so unwrap explicitly and let the shapes be self-describing.
+ *
+ * Distribution is only two levels (`{ data: [ {key, value}, … ] }`) and has no
+ * wrapper, which is why the same code path must handle both.
+ */
+export function asSeriesArray(candidate: unknown, depth = 0): unknown[] {
+    if (depth > 4) return []; // paranoia against a self-referential payload
+
+    if (Array.isArray(candidate)) {
+        // An array of per-metric wrappers → flatten to the points they hold.
+        // Never read `.values` off the array itself: on a plain array that
+        // resolves to Array.prototype.values, the iterator function.
+        const wrappers = candidate.filter(isMetricWrapper);
+        if (wrappers.length > 0) return wrappers.flatMap((w) => w.values);
+
+        // Otherwise it already is the points (or the distribution rows).
+        return candidate;
+    }
 
     if (candidate && typeof candidate === 'object') {
         const obj = candidate as Record<string, unknown>;
 
         // Deliberately Array.isArray, not truthiness — see the module comment.
         if (Array.isArray(obj.values)) return obj.values;
-        if (Array.isArray(obj.data)) return obj.data;
-
-        // `{ data: { values: [...] } }`
-        if (obj.data && typeof obj.data === 'object') {
-            const inner = (obj.data as Record<string, unknown>).values;
-            if (Array.isArray(inner)) return inner;
-        }
+        if ('data' in obj) return asSeriesArray(obj.data, depth + 1);
     }
 
     return [];
@@ -61,12 +87,22 @@ function pointValue(raw: Record<string, unknown>): number {
     return typeof n === 'number' && Number.isFinite(n) ? n : 0;
 }
 
-/** Flattens any Metricool series container into `{ date, value }[]`. */
+/**
+ * Flattens any Metricool series container into `{ date, value }[]`, sorted oldest
+ * → newest.
+ *
+ * The sort is load-bearing, not cosmetic. Metricool's ordering is inconsistent
+ * per network on the same account: Instagram came back strictly DESCENDING,
+ * Facebook ascending, and YouTube in no order at all. Without sorting,
+ * latestValue() would report the oldest follower count as the current one, and
+ * charts would plot their x-axis out of order.
+ */
 export function toSeries(candidate: unknown): SeriesPoint[] {
     return asSeriesArray(candidate)
         .filter((p): p is Record<string, unknown> => Boolean(p) && typeof p === 'object')
         .map((p) => ({ date: pointDate(p), value: pointValue(p) }))
-        .filter((p) => p.date !== '');
+        .filter((p) => p.date !== '')
+        .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 }
 
 /** Period total. Use for flow metrics (reach, clicks, new followers). */

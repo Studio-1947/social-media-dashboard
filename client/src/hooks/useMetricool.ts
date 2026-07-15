@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     fetchCompetitors,
     fetchDistribution,
+    fetchInsights,
     fetchPosts,
     fetchTimelines,
     type DateRange,
@@ -14,16 +15,22 @@ import {
     type DistributionRow,
     type SeriesPoint,
 } from '../lib/series';
-import { mockDistributions, mockPosts, mockTimelines } from '../components/socialMockData';
+import type { Insights } from '../types/insights';
 
 /**
  * Data hooks for the network views.
  *
- * The rule they all encode: an empty-but-successful response falls back to
- * sample data and reports `isSample`, so the caller can badge it. A *failed*
- * request does not — it surfaces as `error`, because pretending a broken
- * credential is "no data this month" is the exact failure that hid a stale token
- * for two weeks.
+ * Three outcomes, kept strictly distinct — conflating them is what lets a broken
+ * integration masquerade as a quiet month:
+ *
+ *   loading            → spinner
+ *   error (request failed) → ErrorPanel. We know nothing; say so.
+ *   empty (200, no points) → `isEmpty`, and the UI renders "No data".
+ *
+ * We do NOT substitute invented sample numbers for an empty metric. Several
+ * metrics are genuinely empty on real accounts (Instagram profile views, website
+ * clicks; Facebook reach on smaller pages), and a plausible-looking fake Reach
+ * figure in front of a client is a liability no badge fully offsets.
  */
 
 function errorMessage(err: unknown): string {
@@ -37,10 +44,10 @@ function errorMessage(err: unknown): string {
 }
 
 export interface TimelinesState {
-    /** Metric key → points. Falls back to sample data when Metricool returned nothing. */
+    /** Metric key → points. Empty array when Metricool returned nothing. */
     series: Record<string, SeriesPoint[]>;
-    /** Metric key → true when the series above is sample data, not real. */
-    isSample: Record<string, boolean>;
+    /** Metric key → true when Metricool returned no points for this range. */
+    isEmpty: Record<string, boolean>;
     loading: boolean;
     error: string | null;
     reload: () => void;
@@ -54,7 +61,7 @@ export function useTimelines(
 ): TimelinesState {
     const [state, setState] = useState<Omit<TimelinesState, 'reload'>>({
         series: {},
-        isSample: {},
+        isEmpty: {},
         loading: true,
         error: null,
     });
@@ -73,26 +80,21 @@ export function useTimelines(
                 if (cancelled) return;
 
                 const series: Record<string, SeriesPoint[]> = {};
-                const isSample: Record<string, boolean> = {};
+                const isEmpty: Record<string, boolean> = {};
 
                 for (const key of keysKey.split(',')) {
+                    // toSeries unwraps Metricool's {data:[{metric,values:[…]}]} nest
+                    // and sorts oldest→newest (their ordering differs per network).
                     const points = toSeries(res.results?.[key]);
-
-                    if (points.length > 0) {
-                        series[key] = points;
-                        isSample[key] = false;
-                    } else {
-                        // Empty (or per-metric failed) — badge it, never pass it off as real.
-                        series[key] = mockTimelines[key] ?? [];
-                        isSample[key] = true;
-                    }
+                    series[key] = points;
+                    isEmpty[key] = points.length === 0;
                 }
 
-                setState({ series, isSample, loading: false, error: null });
+                setState({ series, isEmpty, loading: false, error: null });
             })
             .catch((err) => {
                 if (cancelled) return;
-                setState({ series: {}, isSample: {}, loading: false, error: errorMessage(err) });
+                setState({ series: {}, isEmpty: {}, loading: false, error: errorMessage(err) });
             });
 
         return () => {
@@ -106,7 +108,7 @@ export function useTimelines(
 
 export interface DistributionState {
     rows: Record<string, DistributionRow[]>;
-    isSample: Record<string, boolean>;
+    isEmpty: Record<string, boolean>;
     loading: boolean;
     error: string | null;
 }
@@ -119,7 +121,7 @@ export function useDistributions(
 ): DistributionState {
     const [state, setState] = useState<DistributionState>({
         rows: {},
-        isSample: {},
+        isEmpty: {},
         loading: true,
         error: null,
     });
@@ -128,7 +130,7 @@ export function useDistributions(
 
     useEffect(() => {
         if (blogId == null || keysKey === '') {
-            setState({ rows: {}, isSample: {}, loading: false, error: null });
+            setState({ rows: {}, isEmpty: {}, loading: false, error: null });
             return;
         }
 
@@ -143,23 +145,17 @@ export function useDistributions(
             if (cancelled) return;
 
             const rows: Record<string, DistributionRow[]> = {};
-            const isSample: Record<string, boolean> = {};
+            const isEmpty: Record<string, boolean> = {};
 
             settled.forEach((outcome, i) => {
                 const key = keys[i];
                 const parsed =
                     outcome.status === 'fulfilled' ? toDistribution(outcome.value.data) : [];
-
-                if (parsed.length > 0) {
-                    rows[key] = parsed;
-                    isSample[key] = false;
-                } else {
-                    rows[key] = mockDistributions[key] ?? [];
-                    isSample[key] = true;
-                }
+                rows[key] = parsed;
+                isEmpty[key] = parsed.length === 0;
             });
 
-            setState({ rows, isSample, loading: false, error: null });
+            setState({ rows, isEmpty, loading: false, error: null });
         });
 
         return () => {
@@ -172,7 +168,7 @@ export function useDistributions(
 
 export interface PostsState {
     posts: any[];
-    isSample: boolean;
+    isEmpty: boolean;
     loading: boolean;
     error: string | null;
 }
@@ -185,14 +181,14 @@ export function usePosts(
 ): PostsState {
     const [state, setState] = useState<PostsState>({
         posts: [],
-        isSample: false,
+        isEmpty: false,
         loading: true,
         error: null,
     });
 
     useEffect(() => {
         if (blogId == null || !enabled) {
-            setState({ posts: [], isSample: false, loading: false, error: null });
+            setState({ posts: [], isEmpty: false, loading: false, error: null });
             return;
         }
 
@@ -202,18 +198,12 @@ export function usePosts(
         fetchPosts(network, range, blogId)
             .then((res) => {
                 if (cancelled) return;
-                const list = asSeriesArray(res.data);
-
-                setState({
-                    posts: list.length ? list : mockPosts,
-                    isSample: list.length === 0,
-                    loading: false,
-                    error: null,
-                });
+                const list = asSeriesArray(res.data) as any[];
+                setState({ posts: list, isEmpty: list.length === 0, loading: false, error: null });
             })
             .catch((err) => {
                 if (cancelled) return;
-                setState({ posts: [], isSample: false, loading: false, error: errorMessage(err) });
+                setState({ posts: [], isEmpty: false, loading: false, error: errorMessage(err) });
             });
 
         return () => {
@@ -228,9 +218,10 @@ export function usePosts(
  * Live presence check for competitors — the tab appears only if this client
  * actually has competitor profiles configured in Metricool's own UI.
  *
- * Competitors are opt-in per brand and cannot be enabled through the API, so
- * most clients will have none. `null` means "still checking": render nothing
- * until it resolves rather than flashing a tab that then disappears.
+ * Competitors are opt-in per brand and cannot be enabled through the API. On this
+ * account none of the four clients have any, so the tab is hidden everywhere;
+ * that is the expected state, not a bug. `null` means "still checking": render
+ * nothing until it resolves rather than flashing a tab that then disappears.
  */
 export function useHasCompetitors(
     network: Network,
@@ -261,4 +252,47 @@ export function useHasCompetitors(
     }, [network, range.from, range.to, blogId]);
 
     return hasCompetitors;
+}
+
+export interface InsightsState {
+    insights: Insights | null;
+    loading: boolean;
+    error: string | null;
+    reload: () => void;
+}
+
+export function useInsights(
+    network: Network,
+    range: DateRange,
+    blogId: number | null,
+    enabled = true
+): InsightsState {
+    const [state, setState] = useState<Omit<InsightsState, 'reload'>>({
+        insights: null,
+        loading: true,
+        error: null,
+    });
+    const [nonce, setNonce] = useState(0);
+
+    useEffect(() => {
+        if (blogId == null || !enabled) return;
+
+        let cancelled = false;
+        setState((s) => ({ ...s, loading: true, error: null }));
+
+        fetchInsights(network, range, blogId)
+            .then((insights) => {
+                if (!cancelled) setState({ insights, loading: false, error: null });
+            })
+            .catch((err) => {
+                if (!cancelled) setState({ insights: null, loading: false, error: errorMessage(err) });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [network, range.from, range.to, blogId, enabled, nonce]);
+
+    const reload = useCallback(() => setNonce((n) => n + 1), []);
+    return { ...state, reload };
 }
