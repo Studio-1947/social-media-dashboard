@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
     ErrorPanel,
     LoadingPanel,
@@ -7,7 +8,8 @@ import {
     TimelineChart,
 } from './AnalyticsPanels';
 import { useTimelines } from '../hooks/useMetricool';
-import { latestValue, sumSeries } from '../lib/series';
+import { latestValue, percentDelta, sumSeries } from '../lib/series';
+import { getPreviousPeriod } from '../lib/dateRange';
 import { socialFlowBrand } from '../config/brand';
 import type { DateRange } from '../services/metricoolApi';
 
@@ -34,6 +36,11 @@ const TIMELINE_KEYS = ['subscribers', 'views', 'videos', 'subscribersGained', 's
 export const YouTubeView = ({ range, blogId }: { range: DateRange; blogId: number }) => {
     const timelines = useTimelines('youtube', TIMELINE_KEYS, range, blogId);
 
+    // Previous-period timelines, for the "vs last period" trend pills. A second,
+    // independent request — same keys, shifted window — not a new endpoint.
+    const previousRange = useMemo(() => getPreviousPeriod(range), [range]);
+    const prevTimelines = useTimelines('youtube', TIMELINE_KEYS, previousRange, blogId);
+
     if (timelines.loading) return <LoadingPanel label="Loading YouTube analytics…" />;
     if (timelines.error) {
         return <ErrorPanel message={timelines.error} onRetry={timelines.reload} />;
@@ -45,18 +52,47 @@ export const YouTubeView = ({ range, blogId }: { range: DateRange; blogId: numbe
     const total = (key: string) => (isEmpty[key] ? null : sumSeries(series[key]));
     const latest = (key: string) => (isEmpty[key] ? null : latestValue(series[key]));
 
+    // Trend pills are omitted (not zeroed) while the previous period is still
+    // loading or failed — "no comparison yet" is honest, a fake 0% isn't.
+    const prevReady = !prevTimelines.loading && !prevTimelines.error;
+    const prevTotal = (key: string) =>
+        prevReady && !prevTimelines.isEmpty[key] ? sumSeries(prevTimelines.series[key]) : null;
+    const prevLatest = (key: string) =>
+        prevReady && !prevTimelines.isEmpty[key] ? latestValue(prevTimelines.series[key]) : null;
+    const trendOf = (current: number | null, previous: number | null) => {
+        const pct = percentDelta(current, previous);
+        return pct === null ? null : { pct };
+    };
+
     const gained = total('subscribersGained');
     const lost = total('subscribersLost');
     const netChange = gained !== null && lost !== null ? gained - lost : null;
+    const prevGained = prevTotal('subscribersGained');
+    const prevLost = prevTotal('subscribersLost');
+    const prevNetChange = prevGained !== null && prevLost !== null ? prevGained - prevLost : null;
 
     return (
         <div className="space-y-6 animate-fade-in">
             <Panel title="Channel Overview" subtitle="Everything Metricool exposes for YouTube">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    <StatCard label="Subscribers" value={latest('subscribers')} emphasis />
-                    <StatCard label="Views" value={total('views')} hint="This period" />
+                    <StatCard
+                        label="Subscribers"
+                        value={latest('subscribers')}
+                        emphasis
+                        trend={trendOf(latest('subscribers'), prevLatest('subscribers'))}
+                    />
+                    <StatCard
+                        label="Views"
+                        value={total('views')}
+                        hint="This period"
+                        trend={trendOf(total('views'), prevTotal('views'))}
+                    />
                     <StatCard label="Videos published" value={total('videos')} hint="This period" />
-                    <StatCard label="Net subscribers" value={netChange} />
+                    <StatCard
+                        label="Net subscribers"
+                        value={netChange}
+                        trend={trendOf(netChange, prevNetChange)}
+                    />
                 </div>
                 <TimelineChart series={series.subscribers ?? []} color={ACCENT} name="Subscribers" />
             </Panel>

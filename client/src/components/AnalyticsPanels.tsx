@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import {
     Area,
     AreaChart,
@@ -46,6 +47,16 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 /* Stat card                                                           */
 /* ------------------------------------------------------------------ */
 
+/** Below this much change, a trend reads as "flat" rather than up/down. */
+const FLAT_TREND_THRESHOLD = 1;
+
+export interface StatCardTrend {
+    /** % change vs. the previous period. */
+    pct: number;
+    /** Defaults to "vs last period". */
+    label?: string;
+}
+
 export interface StatCardProps {
     label: string;
     /** `null` means Metricool returned nothing — renders "—", never a fake number. */
@@ -53,9 +64,33 @@ export interface StatCardProps {
     hint?: string;
     /** Renders dark/inverted. Use for the one headline number per group. */
     emphasis?: boolean;
+    /** Period-over-period comparison. Omitted entirely when null/undefined — never a fabricated "no change". */
+    trend?: StatCardTrend | null;
 }
 
-export const StatCard = ({ label, value, hint, emphasis }: StatCardProps) => {
+const TrendPill = ({ trend, emphasis }: { trend: StatCardTrend; emphasis?: boolean }) => {
+    const tone: 'up' | 'down' | 'flat' =
+        trend.pct >= FLAT_TREND_THRESHOLD ? 'up' : trend.pct <= -FLAT_TREND_THRESHOLD ? 'down' : 'flat';
+    const Icon = tone === 'up' ? ArrowUp : tone === 'down' ? ArrowDown : Minus;
+
+    return (
+        <div
+            className={cn(
+                'flex items-center gap-1 text-xs font-semibold mt-1.5',
+                tone === 'flat' && (emphasis ? 'text-white/60' : 'text-primary-400'),
+                tone === 'up' && (emphasis ? 'text-emerald-300' : 'text-accent-green'),
+                tone === 'down' && (emphasis ? 'text-red-300' : 'text-accent-red')
+            )}
+        >
+            <Icon size={12} />
+            <span>
+                {Math.abs(Math.round(trend.pct))}% {trend.label ?? 'vs last period'}
+            </span>
+        </div>
+    );
+};
+
+export const StatCard = ({ label, value, hint, emphasis, trend }: StatCardProps) => {
     const isEmpty = value === null;
 
     return (
@@ -76,6 +111,7 @@ export const StatCard = ({ label, value, hint, emphasis }: StatCardProps) => {
             <div className="text-xs opacity-60 mt-1.5">
                 {isEmpty ? 'Not reported by Metricool for this period' : hint}
             </div>
+            {!isEmpty && trend && <TrendPill trend={trend} emphasis={emphasis} />}
         </div>
     );
 };

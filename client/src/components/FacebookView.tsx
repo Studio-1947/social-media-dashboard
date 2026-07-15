@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     DistributionChart,
     ErrorPanel,
@@ -12,8 +12,10 @@ import { SubTabs, type SubTab } from './SubTabs';
 import { PostsTable } from './PostsTable';
 import { CompetitorsPanel } from './CompetitorsPanel';
 import { InsightsView } from './InsightsView';
+import { TopPostsSpotlight } from './TopPostsSpotlight';
 import { useDistributions, useHasCompetitors, usePosts, useTimelines } from '../hooks/useMetricool';
-import { latestValue, sumSeries } from '../lib/series';
+import { latestValue, percentDelta, sumSeries } from '../lib/series';
+import { getPreviousPeriod } from '../lib/dateRange';
 import { countryName } from '../lib/countryNames';
 import { socialFlowBrand } from '../config/brand';
 import type { DateRange } from '../services/metricoolApi';
@@ -50,8 +52,16 @@ export const FacebookView = ({ range, blogId }: { range: DateRange; blogId: numb
 
     const timelines = useTimelines('facebook', TIMELINE_KEYS, range, blogId);
     const distributions = useDistributions('facebook', DISTRIBUTION_KEYS, range, blogId);
-    const posts = usePosts('facebook', range, blogId, tab === 'posts');
+    // Fetched eagerly (not gated on the Posts tab) so the Overview spotlight below
+    // has data on first load — the client cache means switching to the Posts tab
+    // afterward is then an instant hit, not a second fetch.
+    const posts = usePosts('facebook', range, blogId, true);
     const hasCompetitors = useHasCompetitors('facebook', range, blogId);
+
+    // Previous-period timelines, for the "vs last period" trend pills. A second,
+    // independent request — same keys, shifted window — not a new endpoint.
+    const previousRange = useMemo(() => getPreviousPeriod(range), [range]);
+    const prevTimelines = useTimelines('facebook', TIMELINE_KEYS, previousRange, blogId);
 
     if (timelines.loading) return <LoadingPanel label="Loading Facebook analytics…" />;
     if (timelines.error) {
@@ -67,15 +77,36 @@ export const FacebookView = ({ range, blogId }: { range: DateRange; blogId: numb
     // across a period is meaningless.
     const latest = (key: string) => (isEmpty[key] ? null : latestValue(series[key]));
 
+    // Trend pills are omitted (not zeroed) while the previous period is still
+    // loading or failed — "no comparison yet" is honest, a fake 0% isn't.
+    const prevReady = !prevTimelines.loading && !prevTimelines.error;
+    const prevTotal = (key: string) =>
+        prevReady && !prevTimelines.isEmpty[key] ? sumSeries(prevTimelines.series[key]) : null;
+    const prevLatest = (key: string) =>
+        prevReady && !prevTimelines.isEmpty[key] ? latestValue(prevTimelines.series[key]) : null;
+    const trendOf = (current: number | null, previous: number | null) => {
+        const pct = percentDelta(current, previous);
+        return pct === null ? null : { pct };
+    };
+
     const gained = total('newFollowers');
     const lost = total('lostFollowers');
     const netChange = gained !== null && lost !== null ? gained - lost : null;
 
+    const reach = total('reach');
     const interactions = total('interactions');
     const postsPublished = total('postsCount');
     const perPost =
         interactions !== null && postsPublished !== null && postsPublished > 0
             ? Math.round(interactions / postsPublished)
+            : null;
+
+    // Account-level engagement rate: interactions as a share of reach for the
+    // whole period. Distinct from the per-post engagementRate shown in the Posts
+    // tab (which divides by impressions) — see the hint text below.
+    const engagementRate =
+        interactions !== null && reach !== null && reach > 0
+            ? `${((interactions / reach) * 100).toFixed(1)}%`
             : null;
 
     const tabs: SubTab[] = [
@@ -98,7 +129,12 @@ export const FacebookView = ({ range, blogId }: { range: DateRange; blogId: numb
                         subtitle="Page followers over the selected period"
                     >
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <StatCard label="Followers" value={latest('followers')} emphasis />
+                            <StatCard
+                                label="Followers"
+                                value={latest('followers')}
+                                emphasis
+                                trend={trendOf(latest('followers'), prevLatest('followers'))}
+                            />
                             <StatCard label="New followers" value={gained} />
                             <StatCard label="Lost followers" value={lost} />
                             <StatCard label="Net change" value={netChange} />
@@ -107,12 +143,31 @@ export const FacebookView = ({ range, blogId }: { range: DateRange; blogId: numb
                     </Panel>
 
                     <Panel title="Reach & Engagement">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        {/* Headline pair first, then the supporting counts — the two
+                            numbers that answer "is this working" get emphasis. */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                             {/* Reach is genuinely empty on smaller pages — it will read
                                 "—" rather than invent a number. */}
-                            <StatCard label="Reach" value={total('reach')} emphasis />
+                            <StatCard
+                                label="Reach"
+                                value={reach}
+                                emphasis
+                                trend={trendOf(reach, prevTotal('reach'))}
+                            />
+                            <StatCard
+                                label="Engagement rate"
+                                value={engagementRate}
+                                emphasis
+                                hint="Interactions as a share of reach for this period"
+                            />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                             <StatCard label="Reactions" value={total('reactions')} />
-                            <StatCard label="Interactions" value={interactions} />
+                            <StatCard
+                                label="Interactions"
+                                value={interactions}
+                                trend={trendOf(interactions, prevTotal('interactions'))}
+                            />
                             <StatCard
                                 label="Page views"
                                 value={total('clicks')}
@@ -133,10 +188,19 @@ export const FacebookView = ({ range, blogId }: { range: DateRange; blogId: numb
                             {/* The true period total from Metricool's postsCount metric —
                                 NOT the length of the fetched posts list, which is just a
                                 page size. */}
-                            <StatCard label="Posts published" value={postsPublished} emphasis />
+                            <StatCard
+                                label="Posts published"
+                                value={postsPublished}
+                                emphasis
+                                trend={trendOf(postsPublished, prevTotal('postsCount'))}
+                            />
                             <StatCard label="Interactions per post" value={perPost} />
                         </div>
                     </Panel>
+
+                    {!posts.loading && !posts.error && (
+                        <TopPostsSpotlight posts={posts.posts} network="facebook" />
+                    )}
                 </>
             )}
 

@@ -138,6 +138,16 @@ export function toDistribution(candidate: unknown): DistributionRow[] {
         .filter((r) => r.label !== '' && r.label !== 'undefined');
 }
 
+/**
+ * % change from `previous` to `current`, for period-over-period trend pills.
+ * `null` when either side is unknown, or previous is 0 — a 0 baseline makes
+ * "% change" undefined (or misleadingly infinite), not a real comparison.
+ */
+export function percentDelta(current: number | null, previous: number | null): number | null {
+    if (current === null || previous === null || previous === 0) return null;
+    return ((current - previous) / previous) * 100;
+}
+
 /** Chart-friendly short date, e.g. "Nov 17". */
 export function formatChartDate(iso: string): string {
     const d = new Date(iso);
