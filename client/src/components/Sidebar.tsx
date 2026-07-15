@@ -51,13 +51,19 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
     return (
         <aside
             className={cn(
-                'bg-gradient-to-b from-primary-950 to-primary-900 text-white flex flex-col flex-shrink-0 h-screen sticky top-0 shadow-modern-xl transition-[width] duration-300 ease-in-out relative overflow-hidden',
+                // No overflow-hidden here: the collapse toggle below is meant to
+                // float half outside the sidebar's right edge. Clipping the aside
+                // clips exactly that half, leaving a cut-off sliver instead of a
+                // circle. Sections that DO need to clip their own fade/slide
+                // transition (logo block, footer block) scope overflow-hidden on
+                // themselves instead.
+                'bg-gradient-to-b from-primary-950 to-primary-900 text-white flex flex-col flex-shrink-0 h-screen sticky top-0 shadow-modern-xl transition-[width] duration-300 ease-in-out relative',
                 isCollapsed ? 'w-20' : 'w-72'
             )}
         >
             <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="hidden lg:flex absolute -right-3 top-8 w-6 h-6 bg-white text-primary-900 rounded-full items-center justify-center shadow-modern hover:scale-110 transition-transform z-50"
+                className="hidden lg:flex absolute -right-3.5 top-8 w-7 h-7 bg-white text-primary-900 border border-primary-100 rounded-full items-center justify-center shadow-modern-lg hover:scale-110 hover:shadow-modern-xl transition-all z-50"
             >
                 {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
             </button>
