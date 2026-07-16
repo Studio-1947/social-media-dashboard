@@ -1,0 +1,42 @@
+# HOST-level nginx config — NOT a Docker file, doesn't run in a container.
+# This VPS already runs nginx directly on the host (outside Docker) fronting
+# other projects (task-tracker-s47, doptor-*). This is one more vhost for
+# that SAME nginx — it must never bind :80/:443 itself (that's why the
+# Docker stack in docker-compose.deploy.yml has no proxy/certbot service).
+#
+# One-time setup on the VPS:
+#
+#   sudo cp deploy/nginx-host-vhost.conf.example \
+#       /etc/nginx/sites-available/s47-social-flow.duckdns.org.conf
+#   sudo ln -s /etc/nginx/sites-available/s47-social-flow.duckdns.org.conf \
+#       /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+#   # Only after the plain-HTTP vhost above is live and DNS resolves:
+#   sudo certbot --nginx -d s47-social-flow.duckdns.org
+#
+# certbot's nginx plugin finds this server block by server_name and rewrites
+# it in place to add `listen 443 ssl`, the certificate paths, and an
+# http->https redirect — don't hand-write the HTTPS block yourself, or
+# certbot's edit and yours will conflict. Renewal is whatever mechanism
+# already renews this host's other certs (systemd timer `certbot.timer` or a
+# cron job — check `systemctl list-timers | grep certbot` before assuming
+# you need to set one up).
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name s47-social-flow.duckdns.org;
+
+    location / {
+        # 8082 is this project's client container — see docker-compose.deploy.yml.
+        # Loopback-only on the container side too, so nothing but this nginx
+        # can reach it.
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

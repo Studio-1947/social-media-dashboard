@@ -65,22 +65,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
-
-      # Keeps the VPS's compose file + nginx config in sync with the repo on
-      # every deploy, so editing deploy/ here is enough — no manual VPS copy.
-      - name: Sync deploy config to the VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
-          source: "deploy/docker-compose.deploy.yml,deploy/nginx/app.conf,deploy/init-letsencrypt.sh"
-          target: "/opt/social-flow"
-          strip_components: 1
-
-      - name: Pull images and redeploy
+      # The VPS already has its own full clone at /var/www/social-media-dashboard
+      # (via the `deploy` user's own GitHub SSH access — separate from
+      # VPS_SSH_KEY below, which is only for GitHub Actions to log INTO the
+      # VPS). So this step doesn't copy files at all — it just fast-forwards
+      # that clone to origin/main, which brings deploy/docker-compose.deploy.yml
+      # and everything else along with it.
+      #
+      # NOTE: this VPS also hosts other projects (task-tracker-s47, doptor-*)
+      # behind its own host-level nginx on :80/:443. This job only ever touches
+      # /var/www/social-media-dashboard and the `social-flow-deploy` Docker
+      # Compose project (its own isolated network/volumes) — it never restarts
+      # host nginx or any other project's containers.
+      - name: Pull latest code, pull images, redeploy
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -89,7 +86,10 @@ jobs:
           port: ${{ secrets.VPS_SSH_PORT }}
           script: |
             set -e
-            cd /opt/social-flow
+            cd /var/www/social-media-dashboard
+            git fetch origin main
+            git reset --hard origin/main
+            cd deploy
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
             docker compose -f docker-compose.deploy.yml pull
             docker compose -f docker-compose.deploy.yml up -d --remove-orphans

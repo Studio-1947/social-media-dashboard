@@ -2,8 +2,8 @@ name: social-flow-deploy
 
 # VPS-side stack. Unlike docker-compose.prod.yml (which builds images locally),
 # server/client here are pulled prebuilt from GHCR — CI builds and pushes them,
-# this file only ever pulls. Run from /opt/social-flow/deploy on the VPS, with a
-# sibling .env holding every secret (see DEPLOY.md for the full list).
+# this file only ever pulls. Run from /var/www/social-media-dashboard/deploy on
+# the VPS, with a sibling .env holding every secret (see DEPLOY.md).
 #
 #   docker compose -f docker-compose.deploy.yml pull
 #   docker compose -f docker-compose.deploy.yml up -d --remove-orphans
@@ -11,17 +11,25 @@ name: social-flow-deploy
 # That's exactly what the GitHub Actions deploy job runs over SSH after every
 # push to main — see ../.github/workflows/deploy.yml.
 #
+# THIS VPS ALSO HOSTS OTHER PROJECTS (task-tracker-s47, doptor-*, a gunicorn
+# app) behind a HOST-level nginx already bound to :80/:443. This stack must
+# never try to claim those ports — that's why there's no `proxy`/`certbot`
+# service here, unlike an earlier draft. Isolation from the other projects:
+#   - `client` publishes only to 127.0.0.1:8082 (loopback-only, same pattern
+#     doptor-web already uses on 3000) — reachable from the host's nginx, not
+#     from the public internet directly.
+#   - `server`/`db` aren't published to the host at all, same as before.
+#   - Compose namespaces this project's network/volumes under `social-flow-deploy`
+#     (see the `name:` above) — entirely separate from the other projects'
+#     networks, volumes, and containers. Nothing here can reach or be reached
+#     by task-tracker-s47 or doptor's containers.
+# TLS + the public :80/:443 vhost for s47-social-flow.duckdns.org are handled
+# by the EXISTING host nginx + host certbot — see DEPLOY.md for that vhost.
+#
 # Layout:
-#   proxy   — nginx, terminates TLS for s47-social-flow.duckdns.org, forwards
-#             everything to `client`. Reloads itself every 6h to pick up
-#             certs renewed by `certbot`.
-#   certbot — renews the Let's Encrypt cert every 12h via the webroot method.
-#             Issuing the FIRST cert is a one-time manual step — see
-#             init-letsencrypt.sh — because nginx can't start with ssl_certificate
-#             directives pointing at files that don't exist yet.
 #   client  — the existing nginx image from client/Dockerfile (prod target):
 #             serves the SPA and reverse-proxies /api + /health to `server`.
-#             Not published to the host — only `proxy` can reach it.
+#             Published only to 127.0.0.1:8082 — the host nginx proxies to it.
 #   server  — Express API, same image server/Dockerfile already builds.
 #   db      — Postgres for user accounts, unpublished.
 #   duckdns — re-pings DuckDNS every 5 min so s47-social-flow.duckdns.org keeps
@@ -71,39 +79,14 @@ services:
   client:
     image: ghcr.io/studio-1947/social-media-dashboard-client:latest
     pull_policy: always
-    expose:
-      - "80"
+    ports:
+      # Loopback-only: the public internet never reaches this directly, only
+      # the host's existing nginx (which already fronts the other projects).
+      - "127.0.0.1:8082:80"
     restart: unless-stopped
     depends_on:
       server:
         condition: service_healthy
-
-  proxy:
-    image: nginx:1.27-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
-      - certbot_conf:/etc/letsencrypt:ro
-      - certbot_www:/var/www/certbot:ro
-    # nginx caches the loaded cert in memory, so a renewal on disk does nothing
-    # until reloaded. `nginx -s reload` is graceful — in-flight requests finish
-    # on the old worker while new ones pick up the fresh cert.
-    entrypoint: >
-      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
-    restart: unless-stopped
-    depends_on:
-      - client
-
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - certbot_conf:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
-    entrypoint: >
-      /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
-    restart: unless-stopped
 
   duckdns:
     image: alpine:3.20
@@ -116,5 +99,3 @@ services:
 
 volumes:
   socialflow_pgdata_prod:
-  certbot_conf:
-  certbot_www:
