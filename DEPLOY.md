@@ -15,9 +15,8 @@ Architecture, end to end:
 
 ```
 GitHub push to main
-  -> GitHub Actions builds server + client images (server/Dockerfile, client/Dockerfile, both `prod` target)
-  -> pushes both to ghcr.io/studio-1947/social-media-dashboard-{server,client}
-  -> SSHes into the VPS: git fetch/reset the existing clone, docker compose pull, up -d
+  -> GitHub Actions SSHes into the VPS: git fetch/reset the existing clone,
+     `docker compose up -d --build`
 
 On the VPS:
   host nginx (already running, :80/:443, fronts other sites too)
@@ -25,14 +24,18 @@ On the VPS:
     -> proxy_pass to 127.0.0.1:8082
 
   docker compose project "social-flow-deploy" (deploy/docker-compose.deploy.yml):
-    client (127.0.0.1:8082, nginx: SPA + /api proxy) -> server (:5000, internal only) -> db (Postgres, internal only)
+    client (built from client/Dockerfile, 127.0.0.1:8082, nginx: SPA + /api proxy)
+      -> server (built from server/Dockerfile, :5000, internal only)
+      -> db (Postgres, internal only)
     duckdns — re-pings DuckDNS every 5 min so the domain keeps pointing here
 ```
 
-This reuses the existing `server/Dockerfile` and `client/Dockerfile` unchanged
-— same images as `docker-compose.prod.yml`, just built by CI instead of
-locally and pulled instead of built on the VPS. See [DOCKER.md](DOCKER.md) for
-what those images actually contain.
+No registry involved — CI's only job is to fast-forward the VPS's existing git
+clone and re-run `docker compose up -d --build`, which compiles both images
+directly on the VPS, same as running `docker compose -f docker-compose.prod.yml
+up --build` locally would. This reuses the existing `server/Dockerfile` and
+`client/Dockerfile` unchanged. See [DOCKER.md](DOCKER.md) for what those images
+actually contain.
 
 ## 1. One-time VPS setup
 
@@ -118,12 +121,11 @@ the others — nothing further to configure.
 
 ```bash
 cd /var/www/social-media-dashboard/deploy
-docker compose -f docker-compose.deploy.yml up -d
+docker compose -f docker-compose.deploy.yml up -d --build
 ```
 
-First boot pulls the `db`/`duckdns` images fine, but `server`/`client` won't
-exist on GHCR yet until the GitHub Actions workflow has pushed them at least
-once — that happens in the next section.
+First boot builds `server`/`client` from source (a minute or two — `npm ci` +
+`tsc`/`vite build` for each) and pulls `db`/`duckdns` from Docker Hub.
 
 ## 2. GitHub repo secrets
 
@@ -135,18 +137,9 @@ Settings -> Secrets and variables -> Actions, add:
 | `VPS_USER` | the `deploy` user (or whichever user owns `/var/www/social-media-dashboard`) |
 | `VPS_SSH_KEY` | private key for a **deploy-only** SSH keypair (generate with `ssh-keygen -t ed25519 -f deploy_key -N ""`; put `deploy_key.pub` in that user's `~/.ssh/authorized_keys`, paste `deploy_key` — the private half — here). This is separate from whatever key the `deploy` user already uses to `git clone`/`git pull` *from* GitHub — that direction doesn't change. |
 | `VPS_SSH_PORT` | `22` (or whatever you changed it to) |
-| `GHCR_USERNAME` | your GitHub username |
-| `GHCR_PAT` | a classic PAT with only the `read:packages` scope — used by the VPS to `docker login ghcr.io` and pull. `GITHUB_TOKEN` can't be used here since it's scoped to the Actions run, not usable from an external SSH session. |
 
-`GITHUB_TOKEN` (automatic, no setup needed) is what the build job itself uses
-to *push* images — only the VPS-side pull needs the PAT above.
-
-If you'd rather skip the PAT entirely: after the first push, go to the
-package's GitHub page (org -> Packages -> `social-media-dashboard-server` /
-`-client`) and set visibility to Public. Then `docker login` on the VPS is
-unnecessary and that line can be deleted from the workflow. Given this is a
-client-facing dashboard, keeping the packages private (PAT approach) is the
-safer default — the workflow as committed assumes that.
+That's all four — no registry credentials needed since nothing gets pushed or
+pulled from GHCR.
 
 The workflow also references a `production` GitHub Environment (for a visible
 deploy history / optional future protection rules) — create one under
@@ -173,8 +166,9 @@ should return `200` (or `503` if Metricool/DB creds are wrong — check
 `docker compose -f docker-compose.deploy.yml logs server` on the VPS, same as
 the [DOCKER.md](DOCKER.md) "Verifying it's actually working" section).
 
-Every subsequent push to `main` rebuilds both images and redeploys
-automatically — no manual VPS steps after the one-time setup above. The
+Every subsequent push to `main` rebuilds both images **on the VPS** and
+redeploys automatically — no manual VPS steps after the one-time setup above,
+but each deploy does cost the VPS a minute or two of CPU/RAM to compile. The
 deploy step only ever touches `/var/www/social-media-dashboard` and the
 `social-flow-deploy` Compose project; it never restarts host nginx or any
 other project's containers.
@@ -186,9 +180,13 @@ other project's containers.
 - **DuckDNS** re-pings every 5 min from the `duckdns` container. Hostinger VPS
   IPs are static in practice, so this is insurance against the rare
   reprovision/migration, not something you should expect to ever matter.
-- **Rolling back** a bad deploy: re-run the workflow for an older commit
-  (Actions tab -> select the run -> "Re-run all jobs"), or `git revert` the bad
-  commit and push, letting CI redeploy forward.
+- **Rolling back** a bad deploy: `git revert` the bad commit and push, letting
+  CI rebuild and redeploy forward — there's no previous image to fall back to
+  since nothing is tagged/stored off-VPS.
+- **Build load**: if deploys start feeling slow or the VPS gets noticeably
+  sluggish during one, that's the `npm ci`/`tsc`/`vite build` steps competing
+  with `doptor`/`task-tracker-s47` for CPU. Worth revisiting the GHCR
+  (build-once-in-CI, pull-only-on-VPS) approach at that point.
 - **Port 8082** is this project's only host-visible port (loopback-only). If
   something else on this VPS is already using it, pick a different free port
   in both `deploy/docker-compose.deploy.yml` (the `client` service's `ports:`)

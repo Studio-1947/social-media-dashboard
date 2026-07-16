@@ -1,83 +1,33 @@
 name: Deploy
 
-# Push to main -> build both prod images, push to GHCR, then redeploy the VPS
-# over SSH. See DEPLOY.md for the one-time VPS setup and the GitHub secrets
-# this workflow expects.
+# Push to main -> SSH into the VPS, fast-forward its existing clone, rebuild
+# the two images locally there, redeploy. No registry involved — the VPS
+# builds its own images from source, same as `docker compose -f
+# docker-compose.prod.yml up --build` does locally. See DEPLOY.md for the
+# one-time VPS setup and the GitHub secrets this workflow expects.
 
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
-env:
-  IMAGE_OWNER: studio-1947
-  IMAGE_NAME: social-media-dashboard
-
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & push server image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./server
-          target: prod
-          push: true
-          tags: |
-            ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-server:latest
-            ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-server:${{ github.sha }}
-          cache-from: type=gha,scope=server
-          cache-to: type=gha,mode=max,scope=server
-
-      - name: Build & push client image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./client
-          target: prod
-          push: true
-          # Relative on purpose, matching docker-compose.prod.yml — the outer
-          # nginx proxy forwards to `client`, whose own nginx proxies /api to
-          # `server`, so the browser only ever talks to one origin.
-          build-args: |
-            VITE_API_BASE_URL=/api/metricool
-          tags: |
-            ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-client:latest
-            ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}-client:${{ github.sha }}
-          cache-from: type=gha,scope=client
-          cache-to: type=gha,mode=max,scope=client
-
   deploy:
-    needs: build-and-push
     runs-on: ubuntu-latest
     environment: production
     steps:
       # The VPS already has its own full clone at /var/www/social-media-dashboard
       # (via the `deploy` user's own GitHub SSH access — separate from
       # VPS_SSH_KEY below, which is only for GitHub Actions to log INTO the
-      # VPS). So this step doesn't copy files at all — it just fast-forwards
-      # that clone to origin/main, which brings deploy/docker-compose.deploy.yml
-      # and everything else along with it.
+      # VPS). This step fast-forwards that clone to origin/main, then builds
+      # and restarts in place.
       #
       # NOTE: this VPS also hosts other projects (task-tracker-s47, doptor-*)
       # behind its own host-level nginx on :80/:443. This job only ever touches
       # /var/www/social-media-dashboard and the `social-flow-deploy` Docker
       # Compose project (its own isolated network/volumes) — it never restarts
       # host nginx or any other project's containers.
-      - name: Pull latest code, pull images, redeploy
+      - name: Pull latest code, rebuild, redeploy
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -90,7 +40,5 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             cd deploy
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-            docker compose -f docker-compose.deploy.yml pull
-            docker compose -f docker-compose.deploy.yml up -d --remove-orphans
+            docker compose -f docker-compose.deploy.yml up -d --build --remove-orphans
             docker image prune -af --filter "until=72h"
